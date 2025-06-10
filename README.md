@@ -1,2 +1,2 @@
-# aida-augumentation-tool
-AIDA: A Spatial Data Augmentation Tool for Machine Learning Dataset Preparation
+# AIDA: A Spatial Data Augmentation Tool for Machine Learning Dataset Preparation
+
