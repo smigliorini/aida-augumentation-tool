@@ -1,0 +1,4 @@
+pathDatasets;nameDataset;pathIndexes;typePartition;num
+datasets/datasets20250102_164815_UniqueCode;dataset0001.csv;indexes;partitions;25
+datasets/datasets20250102_164815_UniqueCode;dataset0002.csv;indexes;partitions;25
+datasets/datasets20250102_164815_UniqueCode;dataset0003.csv;indexes;partitions;25
