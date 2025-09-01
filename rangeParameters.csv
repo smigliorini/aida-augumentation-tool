@@ -1,2 +1,0 @@
-pathDatasets;nameDataset;pathSummaries;nameSummary;pathIndexes;pathRangeQueries;nameRangeQueries
-datasets/datasetsTest_cu;dataset02.csv;summaries;sum_datasetsTest_cu.csv;indexes/datasetsTest_cu/dataset02_spatialIndex;rangeQueriesInputs;rqI_datasetsTest_cu.csv
