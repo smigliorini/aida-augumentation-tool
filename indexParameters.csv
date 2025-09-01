@@ -1,4 +1,0 @@
-pathDatasets;nameDataset;pathIndexes;typePartition;num
-datasets/datasetsTest_cu;dataset01.csv;indexes;partitions;50
-datasets/datasetsTest_cu;dataset02.csv;indexes;geometries;1000
-datasets/datasetsTest_cu;dataset03.wkt;indexes;bits;200000
