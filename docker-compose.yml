@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npx vite --host 0.0.0.0
+
+  backend:
+    build: ./backend
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app
+      - ./parent_dir_dataset:/data/parent_dir_dataset
+      - ./parent_dir_histogram:/data/parent_dir_histogram
+      - ./indexes:/data/indexes
+      - ./parent_dir_input_ds:/data/parent_dir_input_ds
+      - ./parent_dir_rq_input:/data/parent_dir_rq_input
+      - ./rangeQueriesResult:/data/rangeQueriesResult
+      - ./parent_dir_rank:/data/parent_dir_rank
+      - ./scalaScript:/data/scalaScript
+      - ./trainingSets:/data/trainingSets
+      - ./augmentation_logs:/data/augmentation_logs
+      - ./datasetsAugmentation:/data/datasetsAugmentation

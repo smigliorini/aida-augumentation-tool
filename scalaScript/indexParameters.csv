@@ -1,0 +1,4 @@
+pathDatasets;nameDataset;pathIndexes;typePartition;num
+/data/parent_dir_dataset/dataset_20250919_163822_939dca25;dataset1.csv;/data/indexes/dataset_20250919_163822_939dca25;partitions;2
+/data/parent_dir_dataset/dataset_20250919_163822_939dca25;dataset2.csv;/data/indexes/dataset_20250919_163822_939dca25;partitions;2
+/data/parent_dir_dataset/dataset_20250919_163822_939dca25;dataset3.csv;/data/indexes/dataset_20250919_163822_939dca25;partitions;2
