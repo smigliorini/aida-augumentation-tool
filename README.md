@@ -1,9 +1,8 @@
-Progetto AIDA - Backend Orchestrator
+# Progetto AIDA - Backend Orchestrator
 Questa è la documentazione per il backend del progetto AIDA. Il server, basato su Flask e Socket.IO, agisce come un orchestratore centrale che gestisce un'architettura a microservizi. Espone API REST e gestisce eventi in tempo reale per coordinare un frontend in React, script di generazione dati in Python e servizi ad alte prestazioni per l'analisi spaziale scritti in Scala.
 
-[Immagine di un diagramma di architettura a microservizi complessa]
 
-🚀 Architettura
+# 🚀 Architettura
 Il progetto è containerizzato con Docker e si basa sui seguenti componenti:
 
 Frontend: Un'applicazione single-page costruita con React, che comunica via API e WebSockets con il server Python.
@@ -28,7 +27,7 @@ Esecuzione di range query complesse (RangeQueryApp).
 
 Orchestrazione: L'intero ambiente è gestito tramite Docker e Docker Compose per garantire coerenza, isolamento e facilità di setup.
 
-✅ Prerequisiti
+# ✅ Prerequisiti
 Prima di iniziare, assicurati di avere installato i seguenti strumenti sul tuo sistema:
 
 Git
@@ -37,7 +36,7 @@ Docker (versione 20.10.x o successiva)
 
 Docker Compose (versione v2.x o successiva)
 
-🛠️ Come Iniziare
+# 🛠️ Come Iniziare
 Segui questi passaggi per configurare ed eseguire il progetto in locale.
 
 1. Clona il Repository
