@@ -1,0 +1,4 @@
+queryDatasetName;numQuery;queryArea;minX;minY;maxX;maxY;areaint
+dataset1;30;1000;0.1;0.1;200;200;2000
+dataset2;30;1000;0.1;0.1;200;200;2000
+dataset3;30;1000;0.1;0.1;200;200;2000

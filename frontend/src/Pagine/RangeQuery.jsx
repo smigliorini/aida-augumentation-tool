@@ -196,8 +196,24 @@ function RangeQuery() {
             toast.current.show({ severity: 'warn', summary: 'Warning', detail: 'Add at least one query to the table.', life: 5000 });
             return;
         }
-        startQueryExecution();
-        socket.current.emit('generate_queries', { queries, folder: selectedFolder });
+        
+        if (socket.current && socket.current.connected) {
+            startQueryExecution();
+            // Callback to confirm the server received the request
+            socket.current.emit('generate_queries', { queries, folder: selectedFolder }, (response) => {
+                // Questo callback viene eseguito dal server
+                if (response && response.status === 'started') {
+                    console.log('Server confirmed: Range Query process started.');
+                } else {
+                    console.error('Server did not confirm process start.');
+                    toast.current.show({ severity: 'error', summary: 'Connection Error', detail: 'Could not start the process on the server.', life: 5000 });
+                    setIsQueryExecuting(false);
+                    setShowProgressDialog(false);
+                }
+            });
+        } else {
+            toast.current.show({ severity: 'error', summary: 'Not Connected', detail: 'Not connected to the server. Please wait or refresh.', life: 5000 });
+        }
     };
 
     // Sends the uploaded CSV file to the server to generate queries.
@@ -206,8 +222,22 @@ function RangeQuery() {
             toast.current.show({ severity: 'warn', summary: 'Warning', detail: 'Please upload a CSV file.', life: 3000 });
             return;
         }
-        startQueryExecution();
-        socket.current.emit('generate_queries_from_csv', { csvFile, folder: selectedFolder });
+    
+        if (socket.current && socket.current.connected) {
+            startQueryExecution();
+            socket.current.emit('generate_queries_from_csv', { csvFile, folder: selectedFolder }, (response) => {
+                if (response && response.status === 'started') {
+                    console.log('Server confirmed: Range Query process from CSV started.');
+                } else {
+                    console.error('Server did not confirm process start.');
+                    toast.current.show({ severity: 'error', summary: 'Connection Error', detail: 'Could not start the process on the server.', life: 5000 });
+                    setIsQueryExecuting(false);
+                    setShowProgressDialog(false);
+                }
+            });
+        } else {
+            toast.current.show({ severity: 'error', summary: 'Not Connected', detail: 'Not connected to the server. Please wait or refresh.', life: 5000 });
+        }
     };
 
     // --- RENDER HELPERS ---
