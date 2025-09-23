@@ -13,7 +13,6 @@ import { FileUpload } from 'primereact/fileupload';
 import { InputSwitch } from 'primereact/inputswitch';
 import { DataTable } from 'primereact/datatable'
 import { Column } from 'primereact/column';
-// Import for the progress popup
 import { Dialog } from 'primereact/dialog';
 import FileExplorer from '../Components/FileExplorer';
 
@@ -26,7 +25,7 @@ function Generator() {
     const [distribution, setDistribution] = useState(null);
     const [geometry, setGeometry] = useState(null);
     const [cardinality, setCardinality] = useState(null);
-    // Dimensions are hardcoded to 2.
+    // Dimensions is hardcoded to 2.
     const [dimensions] = useState(2);
     const [format, setFormat] = useState(null);
     const [boxMaxSizeX, setBoxMaxSizeX] = useState(null);
@@ -98,7 +97,6 @@ function Generator() {
     ];
 
     // Maps distribution-geometry combinations to their specific input fields.
-    // This is used to conditionally render the correct UI inputs.
     const dependentFieldsMap = {
         'Uniform-Point': [], 'Uniform-Box': ['boxMaxSize'], 'Uniform-Polygon': ['pointPolySize', 'pointMaxSeg'],
         'Diagonal-Point': ['diagPercentage', 'diagBuffer'], 'Diagonal-Box': ['diagPercentage', 'diagBuffer', 'boxMaxSize'], 'Diagonal-Polygon': ['diagPercentage', 'diagBuffer', 'pointPolySize', 'pointMaxSeg'],
@@ -247,6 +245,53 @@ function Generator() {
         setPointMaxSeg(null); setSeed(null); setX1(null); setY1(null); setX2(null); setY2(null);
     };
 
+    // Copies the values from the last inserted dataset into the input fields.
+    const copyLastDataset = () => {
+        if (datasets.length === 0) {
+            toast.current.show({ severity: 'info', summary: 'Info', detail: 'No datasets to copy.', life: 3000 });
+            return;
+        }
+
+        const lastDataset = datasets[datasets.length - 1];
+
+        // Helper to capitalize first letter for dropdowns.
+        const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+
+        // Set state for all fields from the last dataset.
+        setDistribution({ name: capitalize(lastDataset.distribution) });
+        setGeometry({ name: capitalize(lastDataset.geometry) });
+        setX1(lastDataset.x1);
+        setY1(lastDataset.y1);
+        setX2(lastDataset.x2);
+        setY2(lastDataset.y2);
+        setCardinality(lastDataset.cardinality);
+        setSeed(lastDataset.seed || null);
+        setFormat({ name: lastDataset.format });
+        setDiagPercentage(lastDataset.percentage || null);
+        setDiagBuffer(lastDataset.buffer || null);
+        setParcSrange(lastDataset.srange || null);
+        setParcDither(lastDataset.dither || null);
+        setBitProbability(lastDataset.probability || null);
+        setBitDigits(lastDataset.digits || null);
+        setPointPolySize(lastDataset.polysize || null);
+        setPointMaxSeg(lastDataset.maxseg || null);
+        setAffineMatrix(lastDataset.affinematrix || '');
+        setCompress(lastDataset.compress || false);
+
+        // Handle composite fields like maxsize.
+        if (lastDataset.maxsize) {
+            const [x, y] = lastDataset.maxsize.split(',');
+            setBoxMaxSizeX(parseFloat(x));
+            setBoxMaxSizeY(parseFloat(y));
+        } else {
+            setBoxMaxSizeX(null);
+            setBoxMaxSizeY(null);
+        }
+        
+        toast.current.show({ severity: 'success', summary: 'Copied', detail: 'Last dataset values have been copied to the form.', life: 3000 });
+    };
+
+
     // Removes a dataset from the table.
     const handleDelete = (rowData) => {
         setDatasets(datasets.filter(item => item.id !== rowData.id));
@@ -331,8 +376,12 @@ function Generator() {
                                 {dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('bitDigits') && <FloatLabel><InputNumber inputId="bitDigits" value={bitDigits} onChange={(e) => setBitDigits(e.value)} variant="filled" /><label htmlFor="bitDigits">Digits</label></FloatLabel>}
                                 
                                 {/* Action buttons */}
-                                <div className='flex justify-content-end flex-wrap'><Button onClick={insertDataset}>Insert Dataset</Button></div>
-                                <div className="flex justify-content-end flex-wrap"><Button onClick={generateData}>Submit</Button></div>
+                                <div className='flex justify-content-end flex-wrap gap-2'>
+                                    {/* Button to copy the last entered dataset for quick editing */}
+                                    <Button onClick={copyLastDataset} disabled={datasets.length === 0} icon="pi pi-copy" tooltip="Copy Last Dataset" className="p-button-secondary" />
+                                    <Button onClick={insertDataset}>Insert Dataset</Button>
+                                    <Button onClick={generateData}>Submit</Button>
+                                </div>
                             </div>
                             {/* Table to display the list of datasets to be generated */}
                             <div>

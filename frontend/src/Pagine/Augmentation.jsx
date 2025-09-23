@@ -269,7 +269,7 @@ function Augmentation() {
                     </div>
                 )}
                 
-                {/* Step 2: Task Configuration */}
+                {/* Task Configuration */}
                 {selectedBinFile && (
                     <div className="col-12 mt-3">
                         <Card title="2. Configure Augmentation Tasks">
@@ -305,7 +305,7 @@ function Augmentation() {
                     </div>
                 )}
 
-                {/* Step 3: Execution */}
+                {/* Execution */}
                 {augmentationTasks.length > 0 && (
                     <div className="col-12 mt-3">
                         <Card title="3. Execute">

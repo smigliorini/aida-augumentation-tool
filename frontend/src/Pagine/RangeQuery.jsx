@@ -201,7 +201,6 @@ function RangeQuery() {
             startQueryExecution();
             // Callback to confirm the server received the request
             socket.current.emit('generate_queries', { queries, folder: selectedFolder }, (response) => {
-                // Questo callback viene eseguito dal server
                 if (response && response.status === 'started') {
                     console.log('Server confirmed: Range Query process started.');
                 } else {

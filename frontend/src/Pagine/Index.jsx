@@ -38,10 +38,10 @@ function Index() {
 
     // --- EFFECTS ---
     useEffect(() => {
-        // Connettiti al server quando il componente viene montato
+        // Connect to the socket server when the component mounts.
         socket.connect();
 
-        // --- DEFINIZIONE DEI GESTORI DI EVENTI ---
+        // --- SOCKET EVENT HANDLERS ---
         const onProgress = (data) => {
             setIndexingProgress(data.progress);
             setIndexingMessage(`Processing: ${data.processed_count}/${data.total_count} (${data.file_name})...`);
@@ -79,31 +79,30 @@ function Index() {
             setRamUsage(data.ram);
         };
 
-        // --- REGISTRAZIONE DEI LISTENER ---
+        // --- REGISTER LISTENERS ---
         socket.on('spatial_indexing_progress', onProgress);
         socket.on('spatial_indexing_complete', onComplete);
         socket.on('spatial_indexing_error', onError);
         socket.on('resource_usage', onResourceUsage);
 
-        // --- FUNZIONE DI PULIZIA ---
+        // --- EFFECT CLEANUP ---
         return () => {
-            // Rimuovi i listener quando il componente viene smontato per evitare perdite di memoria
+            // Deregister listeners on component unmount to prevent memory leaks.
             socket.off('spatial_indexing_progress', onProgress);
             socket.off('spatial_indexing_complete', onComplete);
             socket.off('spatial_indexing_error', onError);
             socket.off('resource_usage', onResourceUsage);
 
-            // Disconnettiti dal server quando l'utente lascia la pagina
+            // Disconnect from the socket when the component unmounts.
             socket.disconnect();
         };
-    }, []); // <-- L'array vuoto assicura che questo effetto venga eseguito UNA SOLA VOLTA.
+    }, []); // The empty dependency array [] ensures this effect runs only once on mount.
 
-    // --- EVENT HANDLERS (nessuna modifica qui) ---
+    // --- EVENT HANDLERS ---
     const handleFolderSelect = (folderName, parentDir) => {
         if (parentDir === 'parent_dir_dataset') {
             setSelectedDatasetFolder(folderName);
             setSelectedFolderParentDir(parentDir);
-            // Non è più necessario `useCallback` se la funzione non è passata a componenti figli memoizzati
             fetchFolderContentForConfig(folderName, parentDir);
         } else {
             setSelectedDatasetFolder(null);
@@ -162,7 +161,7 @@ function Index() {
         setDisplayFileConfigDialog(false);
 
         try {
-            // Questa chiamata HTTP avvia il processo sul backend
+            // This HTTP request triggers the indexing process on the backend.
             const response = await fetch('http://localhost:5000/process_spatial_index', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

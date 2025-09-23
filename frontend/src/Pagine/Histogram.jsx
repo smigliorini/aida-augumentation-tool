@@ -73,7 +73,6 @@ function Histogram() {
 
     // Handles folder selection from the FileExplorer component.
     const handleFolderSelection = (folderName, parentDir) => {
-        // We only care about folders from the '1. Generator' section.
         if (parentDir === 'parent_dir_dataset') {
             setSelectedDatasetFolder(folderName);
             setSelectedFolderParentDir(parentDir);
