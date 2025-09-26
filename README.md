@@ -60,48 +60,85 @@
 
 ## FILE PER L'USO DEGLI SCRIPT
 **indexParameters.csv** --> header: "pathDatasets;nameDataset;pathIndexes;typePartition;num"
+
                             pathDatasets = cartella in cui trovare il dataset da partizionare ("datasets/datasetsData_Time_UniqueCode");
+                            
                             nameDataset = nome del dataset da partizionare ("datasetNumber.extension");
+                            
                             pathIndexes = cartella in cui salvare l'indice spaziale ("indexes");
+                            
                             typePartition = tipo di partizionamento possibile ("partitions", "geometries" o "bits");
+                            
                             num = numero correlato al tipo di partizionamento scelto ("number_partitions", "number_geometries" o "number_bits").
 
 **rangeParameters.csv** --> header: "pathDatasets;nameDataset;pathSummaries;nameSummary;pathIndexes;pathRangeQueries;nameRangeQueries"
+
                             pathDatasets = cartella in cui trovare il dataset selezionato ("datasets/datasetsData_Time_UniqueCode");
+                            
                             nameDataset = nome del dataset selezionato ("datasetNumber.extension");
+                            
                             pathSummaries = cartella in cui trovare i sommari dei datasets ("summaries");
+                            
                             nameSummary = file in cui trovare il sommario del dataset selezionato ("sum_datasetsData_Time_UniqueCode.csv");
+                            
                             pathIndexes = cartella in cui trovare l'indice spaziale del dataset selezionato ("indexes/datasetsData_Time_UniqueCode/datasetNumber_spatialIndex");
+                            
                             pathRangeQueries = cartella in cui trovare le range queries correlate al dataset selezionato ("rangeQueriesInputs");
+                            
                             nameRangeQueries = file in cui trovare le range queries correlate al dataset selezionato ("rqI_datasetsData_Time_UniqueCode.csv").
 
 **rankParameters.csv** --> header: "parameterCategorized;numberIntervals;pathRangeQueriesResult;nameRangeQueriesResult;pathSummaries;nameSummary;pathFD;nameFD"
+
                            parameterCategorized = parametro che si vuole categorizzare ("cardinality", "executionTime" o "mbrTests");
+                           
                            numberIntervals = numero di intervalli che si vogliono generare ("number");
+                           
                            pathRangeQueriesResult = cartella in cui trovare i risultati delle range queries ("rangeQueriesResult");
+                           
                            nameRangeQueriesResult = file in cui trovare i risultati delle range queries ("rqR_datasetsData_Time_UniqueCode.csv");
+                           
                            pathSummaries = cartella in cui trovare i sommari dei datasets ("summaries");
+                           
                            nameSummary = file in cui trovare il sommario del dataset selezionato ("sum_datasetsData_Time_UniqueCode.csv");
+                           
                            pathFD = cartella in cui trovare i file correlati agli indici spaziali ("fd");
+                           
                            nameFD = nomi dei file da inserire all'inetrno del training set correlati agli indici spaziali ("fd_sum_datasetsData_Time_UniqueCode.csv;fd_rqR_datasetsData_Time_UniqueCode.csv").
 
 **augmentationParameters.csv** --> header: "pathTrainingSet;nameBin;nameSummary;nameRangeQueriesResult;nameInputs;pathDatasets;pathIndexes"
+
                                    pathTrainingSet = cartella contenente l'insieme di file utili per l'augmentation del set scelto ("trainingSets/datasetsData_Time_UniqueCoede/training_set_number");
+                                   
                                    nameBin = file contenente i bin relativi al set scelto ("bin_datasetsData_Time_UniqueCode_ts.csv");
+                                   
                                    nameSummary = file contenente il sommario dei datasets appartenenti al set scelto ("sum_datasetsData_Time_UniqueCode_ts.csv");
+                                   
                                    nameRangeQueriesResult = file contenente i risultati delle range queries correlate al set scelto ("rqR_datasetsData_Time_UniqueCode_ts.csv");
+                                   
                                    nameInputs = file contenente gli input dell'utente ("input.csv");
+                                   
                                    pathDatasets = cartella contenente i datasets relativi al set selezionato ("datasets/datasetsData_Time_UniqueCode");
+                                   
                                    pathIndexes = cartella contenente gli indici spaziali dei datasets relativi al set selezionato ("indexes/datasetsData_Time_UniqueCode").
 
 **fdParameters.csv** --> header: "pathDatasets;pathSummary;nameSummary;pathRangeQuery_ts;nameRangeQuery_ts;fromX;toX;pathFD;pathFD_ts;parameters"
+
                          pathDatasets = cartella contenente i datasets generati ("datasets/datasetsData_Time_UniqueCode");
+                         
                          pathSummary = cartella contenente i sommari dei datasets ("summaries");
+                         
                          nameSummary = file contenente il sommario dei datasets richiesti ("sum_datasetsData_Time_UniqueCode.csv");
-                         pathRangeQuery_ts = cartella contenente le range queries ("rangeQueriesResult" o "");
-                         nameRangeQuery_ts = file contenente le range queries richieste ("rqR_datasetsData_Time_UniqueCode.csv" o "");
-                         fromX =  ("");
-                         toX =  ("");
-                         pathFD =  ("");
-                         pathFD_ts =  ("");
-                         parameters =  ("").
+                         
+                         pathRangeQuery_ts = cartella contenente le range queries ("rangeQueriesResult" o "trainingSets/datasetsData_Time_UniqueCode/training_set_number");
+                         
+                         nameRangeQuery_ts = file contenente le range queries richieste ("rqR_datasetsData_Time_UniqueCode.csv");
+                         
+                         fromX = numero dataset da cui partire ("number");
+                         
+                         toX = numero ultimo dataset ("number");
+                         
+                         pathFD = dove salvare il risultato del calcolo della dimensione frattale ("fd");
+                         
+                         pathFD_ts = dove salvare il risultato del calcolo della dimensione frattale ("trainingSets/datasetsData_Time_UniqueCode/training_set_number" o "fd");
+                         
+                         parameters = parametri su cui calcolare la dimensione frattale ("distribution", "avg_area", "avg_side_length_0", "avg_side_length_1", "cardinality", "executionTime" o "mbrTests").
