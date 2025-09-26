@@ -13,34 +13,37 @@
 
 **indexes** --> cartella contenente gli indici spaziali generati corrsipondenti a ciascun dataset, divisi in cartelle.
 
-          - nomi cartelle L.1: "datasetsData_Time_UniqueCode";
-          - nomi cartelle L.2: "datasetNumber_spatialIndex";
-          - nomi file: "part-number.csv".
+          - nomi cartelle L.1: "datasetsData_Time_UniqueCode"; --> cartella contenente gli indici spaziali dei datasets generati in "Data", "Time" con "UniqueCode"
+          - nomi cartelle L.2: "datasetNumber_spatialIndex";   --> cartella contenente l'indice spaziale di "datasetNumber"
+          - nomi file: "part-number.csv";                      --> file contenente le geometrie della partizione "number"
+                       "_master.rsgrove".                      --> file contenente un recap delle singole partizioni generate con info su ciascuna
 
-**rangeQueriesInputs** --> cartella contenente i file con le Range Queries, divisi per gruppi di datasets.
+**rangeQueriesInputs** --> cartella contenente i file con le Range Queries da applicare.
 
-          - nomi file: "rqI_datasetsData_Time_UniqueCode.csv".
+          - nomi file: "rqI_datasetsData_Time_UniqueCode.csv". --> file contenente le Range Queries da applicare al gruppo di datasets generati in "Data", "Time" con "UniqueCode"
 
-**rangeQueriesResult** --> cartella contenente i file con i risultati delle Range Queries (cardinality, executionTime, mbrTests).
+**rangeQueriesResult** --> cartella contenente i file con i risultati delle Range Queries ("cardinality", "executionTime", "mbrTests").
 
-          - nomi file: "rqR_datasetsData_Time_UniqueCode.csv".
+          - nomi file: "rqR_datasetsData_Time_UniqueCode.csv". --> file contenente gli esiti delle Range Queries del gruppo di datasets generati in "Data", "Time" con "UniqueCode"
 
 **src** --> cartella contenente due script fondamentali per il processo di Augmentation. Inseriti nel seguente modo per l'uso di SBT.
 
 **summaries** --> cartella contenente i file con le principali caratteristiche dei dataset.
 
-          - nomi file: "sum_datasetsData_Time_UniqueCode.csv".
+          - nomi file: "sum_datasetsData_Time_UniqueCode.csv". --> file contenente le caratteristiche del gruppo di datasets generati in "Data", "Time" con "UniqueCode"
 
 **trainingSets** --> cartella contenente tutti i training set divisi per ciascun gruppo di dataset.
 
           - nomi cartelle L.1: "datasetsData_Time_UniqueCode";
           - nomi cartelle L.2: "training_set_number" e "training_set_number_diff";
-          - nomi file: "bin_datasetsData_Time_UniqueCode_ts.csv" = bin associati al parametro categorizzato;
-                       "fd_datasetsData_Time_UniqueCode_ts.csv" = dimensioni frattali correlati al gruppo di dataset in analisi;
-                       "input.csv" = file di input dell'utente su cui applicare l'effettiva augmentation;
-                       "rqR_datasetsData_Time_UniqueCode_ts.csv" = risultati delle Range Queries correlate al gruppo di dataset in analisi;
-                       "sum_datasetsData_Time_UniqueCode_ts.csv" = principali caratteristiche dei dataset in analisi;
-                       "new_datasets.csv" = principali caratteristiche dei nuovi dataset generati con le tecniche di augmentation.
+          - nomi file: "bin_datasetsData_Time_UniqueCode_ts.csv";    --> bin associati al parametro categorizzato
+                       "fd_sum_datasetsData_Time_UniqueCode.csv";    --> dimensioni frattali sui parametri "avg_area", "avg_side_length_0", "avg_side_length_1"
+                       "fd_rqR_datasetsData_Time_UniqueCode.csv";    --> dimensioni frattali sui parametri "cardinality", "executionTime", "mbrTests" (prima "augmentation")
+                       "fd_rqR_datasetsData_Time_UniqueCode_ts.csv"; --> dimensioni frattali sui parametri "cardinality", "executionTime", "mbrTests" (dopo "augmentation")
+                       "input.csv";                                  --> file di input dell'utente con specifiche sull'applicazione di "augmentation"
+                       "rqR_datasetsData_Time_UniqueCode_ts.csv";    --> risultati delle Range Queries correlate al gruppo di dataset in analisi
+                       "sum_datasetsData_Time_UniqueCode_ts.csv";    --> principali caratteristiche dei dataset in analisi
+                       "new_datasets.csv".                           --> principali caratteristiche dei nuovi dataset generati con le tecniche di augmentation
 
 ## SCRIPT
 **generator.py - generator.sh** --> script col compito di generare i dataset presenti in "summaries/sum_datasetsData_Time_UniqueCode.csv".
