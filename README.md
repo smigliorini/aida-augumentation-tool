@@ -3,13 +3,13 @@
 ## CARTELLE:
 **datasets** --> cartella contenente tutti i datasets generati, divisi in cartelle in base a come sono stati generati.
 
-          - nomi cartelle: "datasetsData_Time_UniqueCode";
-          - nomi file: "datasetNumber.extension".
+          - nomi cartelle: "datasetsData_Time_UniqueCode"; --> cartella contenente i datasets generati in "Data", "Time" con "UniqueCode"
+          - nomi file: "datasetNumber.extension".          --> file contenente le geometrie di "datasetNumber" (extension: ".csv" o ".wkt")
 
 **fd** --> cartella contenente tutti i file con le dimensioni frattali (?). I nomi dei file, dipendono dalla cartella dataset corrispondente.
 
-          - nomi file: "fd_sum_datasetsData_Time_UniqueCode.csv";
-                       "fd_rqR_datasetsData_Time_UniqueCode.csv".
+          - nomi file: "fd_sum_datasetsData_Time_UniqueCode.csv"; --> file contenente l'esito delle dimensioni frattali su "avg_area", "avg_side_length_0", "avg_side_length_1"
+                       "fd_rqR_datasetsData_Time_UniqueCode.csv". --> file contenente l'esito delle dimensioni frattali su "cardinality", "executionTime", "mbrTests"
 
 **indexes** --> cartella contenente gli indici spaziali generati corrsipondenti a ciascun dataset, divisi in cartelle.
 
