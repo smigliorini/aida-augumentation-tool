@@ -109,5 +109,4 @@
           - toX = numero ultimo dataset ("number");
           - pathFD = dove salvare il risultato del calcolo della dimensione frattale ("fd");
           - pathFD_ts = dove salvare il risultato del calcolo della dimensione frattale ("trainingSets/datasetsData_Time_UniqueCode/training_set_number" o "fd");
-                         
-                         parameters = parametri su cui calcolare la dimensione frattale ("distribution", "avg_area", "avg_side_length_0", "avg_side_length_1", "cardinality", "executionTime" o "mbrTests").
+          - parameters = parametri su cui calcolare la dimensione frattale ("distribution", "avg_area", "avg_side_length_0", "avg_side_length_1", "cardinality", "executionTime" o "mbrTests").
