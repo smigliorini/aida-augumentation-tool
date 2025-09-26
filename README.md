@@ -8,7 +8,8 @@
 
 **fd** --> cartella contenente tutti i file con le dimensioni frattali (?). I nomi dei file, dipendono dalla cartella dataset corrispondente.
 
-          - nomi file: "fd_datasetsData_UniqueCode.csv".
+          - nomi file: "fd_sum_datasetsData_Time_UniqueCode.csv";
+                       "fd_rqR_datasetsData_Time_UniqueCode.csv".
 
 **indexes** --> cartella contenente gli indici spaziali generati corrsipondenti a ciascun dataset, divisi in cartelle.
 
