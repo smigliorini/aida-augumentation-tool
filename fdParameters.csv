@@ -1,0 +1,2 @@
+pathDatasets;pathSummary;nameSummary;pathRangeQuery_ts;nameRangeQuery_ts;fromX;toX;pathFD;pathFD_ts;parameters
+;;;trainingSets/datasets20250527_153022_UniqueCode/training_set_2;rqR_datasets20250527_153022_UniqueCode_ts.csv;;;;trainingSets/datasets20250527_153022_UniqueCode/training_set_2;cardinality;executionTime;mbrTests
