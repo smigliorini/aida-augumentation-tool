@@ -62,13 +62,9 @@
 **indexParameters.csv** --> header: "pathDatasets;nameDataset;pathIndexes;typePartition;num"
 
                             pathDatasets = cartella in cui trovare il dataset da partizionare ("datasets/datasetsData_Time_UniqueCode");
-                            
                             nameDataset = nome del dataset da partizionare ("datasetNumber.extension");
-                            
                             pathIndexes = cartella in cui salvare l'indice spaziale ("indexes");
-                            
                             typePartition = tipo di partizionamento possibile ("partitions", "geometries" o "bits");
-                            
                             num = numero correlato al tipo di partizionamento scelto ("number_partitions", "number_geometries" o "number_bits").
 
 **rangeParameters.csv** --> header: "pathDatasets;nameDataset;pathSummaries;nameSummary;pathIndexes;pathRangeQueries;nameRangeQueries"
