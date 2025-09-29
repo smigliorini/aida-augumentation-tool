@@ -1,4 +1,0 @@
-queryDatasetName;numQuery;queryArea;minX;minY;maxX;maxY;areaint
-dataset1;20;3;0.1;0.1;10;10;10
-dataset2;10;6;0.1;0.1;8;8;5
-dataset3;30;40;0.1;0.1;30;30;27

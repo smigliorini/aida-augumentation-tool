@@ -9,35 +9,81 @@ import { Splitter, SplitterPanel } from 'primereact/splitter';
 import { Dialog } from 'primereact/dialog';
 import { ScrollPanel } from 'primereact/scrollpanel';
 import { Divider } from 'primereact/divider';
-import { InputText } from 'primereact/inputtext'; 
-import { Toolbar } from 'primereact/toolbar'; 
+import { InputText } from 'primereact/inputtext';
+import { Toolbar } from 'primereact/toolbar';
 
+/**
+ * FileExplorer Component
+ * * This component renders a comprehensive file explorer interface. It features a two-panel layout:
+ * - The left panel displays a folder tree, which can be expanded to navigate the directory structure.
+ * - The right panel displays a table of files contained within the currently selected folder.
+ * * Features:
+ * - Asynchronous loading of folder contents.
+ * - Actions for folders: Rename, Download (as zip), Delete.
+ * - Actions for files: Preview, Download, Delete.
+ * - User feedback through toast notifications.
+ * - A manual refresh button to update the view.
+ * * @param {object} props - The component's props.
+ * @param {function} props.onFolderSelect - Optional callback function triggered when a folder is selected. It receives (relativePath, baseDir).
+ * @param {function} props.onFileSelect - Optional callback function triggered when a file is selected. It receives the file object.
+ */
 function FileExplorer({ onFolderSelect, onFileSelect }) {
     // --- STATE MANAGEMENT ---
+    
+    // State for the folder tree structure.
     const [nodes, setNodes] = useState([]);
+    // State for the files displayed in the data table for the selected folder.
     const [files, setFiles] = useState([]);
+    // State to keep track of the currently selected folder's key (path).
     const [selectedNodeKey, setSelectedNodeKey] = useState(null);
+    // State to manage which nodes in the tree are currently expanded.
     const [expandedKeys, setExpandedKeys] = useState({});
+    // State to show loading indicators while fetching data.
     const [loading, setLoading] = useState(false);
-    
+    // State for the currently selected file in the DataTable.
     const [selectedFile, setSelectedFile] = useState(null);
-    
+    // State to control the visibility of the file preview dialog.
     const [isPreviewDialogVisible, setIsPreviewDialogVisible] = useState(false);
+    // State to hold the content of the file being previewed.
     const [previewContent, setPreviewContent] = useState('');
+    // State to hold the name of the file being previewed for the dialog header.
     const [previewFileName, setPreviewFileName] = useState('');
-
+    // State to control the visibility of the folder rename dialog.
     const [isRenameDialogVisible, setIsRenameDialogVisible] = useState(false);
+    // State to hold the new name for the folder being renamed.
     const [newFolderName, setNewFolderName] = useState('');
+    // State to store the node object of the folder being renamed.
     const [currentNodeToRename, setCurrentNodeToRename] = useState(null);
 
-
+    // Ref for the Toast component to show notifications programmatically.
     const toast = useRef(null);
-    const backendUrl = 'http://localhost:5000'; 
+    // Base URL for the backend API.
+    const backendUrl = 'http://localhost:5000';
 
     // --- HELPER FUNCTIONS ---
+
+    /**
+     * Extracts the base directory from a full path.
+     * e.g., "root1/folderA/file.txt" -> "root1"
+     * @param {string} path The full path of the item.
+     * @returns {string|null} The base directory name or null if path is invalid.
+     */
     const getBaseDirFromPath = (path) => path ? path.split('/')[0] : null;
+
+    /**
+     * Extracts the relative path (excluding the base directory).
+     * e.g., "root1/folderA/file.txt" -> "folderA/file.txt"
+     * @param {string} path The full path of the item.
+     * @returns {string} The relative path.
+     */
     const getRelativePath = (path) => path ? path.split('/').slice(1).join('/') : '';
-    
+
+    /**
+     * Recursively finds a node in the tree state by its key (path).
+     * @param {Array} nodesToSearch The array of nodes to search through.
+     * @param {string} key The key to find.
+     * @returns {object|null} The found node object or null.
+     */
     const findNodeByKey = (nodesToSearch, key) => {
         for (let node of nodesToSearch) {
             if (node.key === key) return node;
@@ -49,26 +95,37 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         return null;
     };
     
+    /**
+     * Refreshes the contents of a parent node after one of its children has been modified (e.g., renamed or deleted).
+     * @param {string} childKey The key of the child node that was changed.
+     */
     const refreshParentOfNode = async (childKey) => {
         const pathParts = childKey.split('/');
-        if (pathParts.length <= 1) { 
+        // If the path has only one part, it's a root folder, so we refetch all roots.
+        if (pathParts.length <= 1) {
             fetchRoots();
             return;
         }
 
+        // Determine the parent's key.
         const parentKey = pathParts.slice(0, -1).join('/');
-        let newNodes = JSON.parse(JSON.stringify(nodes));
+        let newNodes = JSON.parse(JSON.stringify(nodes)); // Deep copy to avoid state mutation issues.
         const parentNode = findNodeByKey(newNodes, parentKey);
         
         if (parentNode) {
+            // Reload the parent node's content from the server.
             const { childFolders } = await loadNodeContent(parentNode);
-            parentNode.children = childFolders;
-            setNodes(newNodes);
+            parentNode.children = childFolders; // Update its children.
+            setNodes(newNodes); // Set the new state for the tree.
             
+            // Ensure the parent node remains expanded.
             setExpandedKeys(prevKeys => ({...prevKeys, [parentKey]: true}));
         }
     };
     
+    /**
+     * Fetches the root-level folders from the backend to initialize the tree.
+     */
     const fetchRoots = () => {
         setLoading(true);
         fetch(`${backendUrl}/api/explorer/roots`)
@@ -82,6 +139,11 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
     }
 
     // --- API & DATA FETCHING ---
+
+    /**
+     * Fetches the content (subfolders and files) of a given node from the backend.
+     * This is wrapped in useCallback to prevent re-creation on every render.
+     */
     const loadNodeContent = useCallback(async (node) => {
         setLoading(true);
         try {
@@ -94,7 +156,7 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
             const childFolders = content.filter(item => item.type === 'folder');
             const childFiles = content.filter(item => item.type === 'file');
             
-            setFiles(childFiles);
+            setFiles(childFiles); // Update the files table.
             setLoading(false);
             return { childFolders, childFiles };
         } catch (error) {
@@ -106,77 +168,99 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         }
     }, []);
 
+    /**
+     * Reloads the content of the currently selected folder.
+     * Wrapped in useCallback for optimization.
+     */
     const refreshCurrentNodeContent = useCallback(async () => {
         if (!selectedNodeKey) return;
         
-        // --- INIZIO MODIFICA: Migliorata la logica di refresh del nodo corrente ---
-        // Trova il nodo nell'albero attuale per ricaricarne i figli
+        // Find the node in the current tree to reload its children.
         const nodeToRefresh = findNodeByKey(nodes, selectedNodeKey);
         if (nodeToRefresh) {
             const { childFolders, childFiles } = await loadNodeContent(nodeToRefresh);
-            // Aggiorna la lista dei file
-            setFiles(childFiles); 
+            // Update the file list in the DataTable.
+            setFiles(childFiles);
 
-            // Aggiorna l'albero con le nuove sottocartelle
+            // Update the tree with the new subfolders.
             let newNodes = JSON.parse(JSON.stringify(nodes));
             const nodeInNewTree = findNodeByKey(newNodes, selectedNodeKey);
             if(nodeInNewTree) {
                 nodeInNewTree.children = childFolders;
+                // Mark as leaf if it has no children, so the expand icon disappears.
                 nodeInNewTree.leaf = childFolders.length === 0;
             }
             setNodes(newNodes);
         }
-        // --- FINE MODIFICA ---
 
     }, [selectedNodeKey, nodes, loadNodeContent]);
     
+    // useEffect hook to fetch root folders when the component mounts for the first time.
     useEffect(() => {
         fetchRoots();
     }, []);
 
     // --- EVENT HANDLERS (Tree) ---
-    const onSelect = useCallback((node) => {
+
+    /**
+     * Handles the selection of a node in the folder tree.
+     */
+    const onSelect = useCallback((event) => {
+        const node = event.node;
         if (node.type !== 'folder') return;
         
         setSelectedNodeKey(node.key);
-        setFiles([]);
+        setFiles([]); // Clear previous file list.
 
-        setSelectedFile(null);
+        setSelectedFile(null); // Deselect any selected file.
         if (onFileSelect) {
             onFileSelect(null);
         }
         
+        // Trigger the optional onFolderSelect callback prop.
         if (onFolderSelect) {
             onFolderSelect(getRelativePath(node.key), getBaseDirFromPath(node.key));
         }
         
+        // Load the content of the newly selected folder.
         loadNodeContent(node);
     }, [onFolderSelect, onFileSelect, loadNodeContent]);
 
+    /**
+     * Handles the expansion of a node in the folder tree.
+     * It dynamically loads the node's children if they haven't been loaded yet.
+     */
     const onExpand = async (event) => {
         const node = event.node;
         if (selectedNodeKey !== node.key) {
-            onSelect(node);
+            // If the expanded node is not the currently selected one, select it first.
+            onSelect({ node });
         }
+        // If children are already loaded or it's a leaf node, just update the expanded keys state.
         if ((node.children && node.children.length > 0) || node.leaf) {
             setExpandedKeys(event.expandedKeys);
             return;
         }
 
+        // Fetch children from the API.
         const { childFolders } = await loadNodeContent(node);
         let newNodes = JSON.parse(JSON.stringify(nodes));
         const nodeToUpdate = findNodeByKey(newNodes, node.key);
         if (nodeToUpdate) {
             nodeToUpdate.children = childFolders;
             if (childFolders.length === 0) {
-                nodeToUpdate.leaf = true; 
+                nodeToUpdate.leaf = true; // Mark as leaf if no subfolders are found.
             }
         }
-        setNodes(newNodes);
-        setExpandedKeys(event.expandedKeys);
+        setNodes(newNodes); // Update the tree structure.
+        setExpandedKeys(event.expandedKeys); // Update the expanded state.
     };
 
     // --- FILE ACTION HANDLERS ---
+
+    /**
+     * Handles the "Preview" action for a file. Fetches its content and displays it in a dialog.
+     */
     const handlePreviewFile = useCallback(async (rowData) => {
         const itemPath = rowData.data.path;
         const baseDir = getBaseDirFromPath(itemPath);
@@ -194,6 +278,9 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         }
     }, []);
 
+    /**
+     * Handles the "Download" action for a file by redirecting the browser.
+     */
     const handleDownloadFile = useCallback(async (rowData) => {
         const itemPath = rowData.data.path;
         const baseDir = getBaseDirFromPath(itemPath);
@@ -201,8 +288,11 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         window.location.href = `${backendUrl}/download/${relativePathForApi}?base_dir=${baseDir}`;
     }, []);
 
+    /**
+     * Handles the "Delete" action for a file. Sends a DELETE request to the backend.
+     */
     const handleDeleteFile = useCallback(async (rowData) => {
-        if (window.confirm(`Are you sure to delete "${rowData.label}"?`)) {
+        if (window.confirm(`Are you sure you want to delete "${rowData.label}"?`)) {
             const itemPath = rowData.data.path;
             const baseDir = getBaseDirFromPath(itemPath);
             const relativePathForApi = getRelativePath(itemPath);
@@ -210,7 +300,7 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
                 const response = await fetch(`${backendUrl}/api/folders/${relativePathForApi}?base_dir=${baseDir}`, { method: 'DELETE' });
                 if (!response.ok) throw new Error((await response.json()).error || 'Deletion failed');
                 toast.current.show({ severity: 'success', summary: 'Success', detail: `File "${rowData.label}" deleted.` });
-                refreshCurrentNodeContent();
+                refreshCurrentNodeContent(); // Refresh the file list.
             } catch (error) {
                 toast.current.show({ severity: 'error', summary: 'Error', detail: error.message });
             }
@@ -219,6 +309,10 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
     
     // --- FOLDER ACTION HANDLERS ---
 
+    /**
+     * Handles downloading the currently selected folder as a zip file.
+     * It first requests the server to create a zip, then downloads it.
+     */
     const handleDownloadFolder = async () => {
         if (!selectedNodeKey) return;
         const baseDir = getBaseDirFromPath(selectedNodeKey);
@@ -227,10 +321,12 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         toast.current.show({ severity: 'info', summary: 'Zipping', detail: 'Preparing folder for download...', life: 4000 });
 
         try {
+            // Step 1: Request the backend to create a zip file.
             const zipResponse = await fetch(`${backendUrl}/zip/folder/${relativePath}?base_dir=${baseDir}`);
             if (!zipResponse.ok) throw new Error((await zipResponse.json()).error || 'Failed to create zip file.');
             const { zip_filename } = await zipResponse.json();
 
+            // Step 2: Trigger the download of the created zip file.
             const downloadUrl = `${backendUrl}/download/${zip_filename}?base_dir=${baseDir}`;
             const link = document.createElement('a');
             link.href = downloadUrl;
@@ -239,6 +335,8 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
             link.click();
             link.remove();
             
+            // Step 3 (Optional): Send a confirmation to the server after a short delay
+            // so it can clean up the temporary zip file.
             setTimeout(async () => {
                 try {
                     await fetch(`${backendUrl}/download/confirm/${zip_filename}?base_dir=${baseDir}`, { method: 'POST' });
@@ -252,10 +350,13 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         }
     };
     
+    /**
+     * Handles deleting the currently selected folder and all its contents.
+     */
     const handleDeleteFolder = async () => {
         if (!selectedNodeKey) return;
         const node = findNodeByKey(nodes, selectedNodeKey);
-        if (window.confirm(`Are you sure to delete the folder "${node.label}" and all its content?`)) {
+        if (window.confirm(`Are you sure you want to delete the folder "${node.label}" and all its content?`)) {
             const baseDir = getBaseDirFromPath(selectedNodeKey);
             const relativePath = getRelativePath(selectedNodeKey);
             
@@ -265,6 +366,7 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
                 
                 toast.current.show({ severity: 'success', summary: 'Success', detail: `Folder "${node.label}" deleted.` });
                 
+                // Reset selection and refresh the parent folder to update the tree.
                 setSelectedNodeKey(null);
                 setFiles([]);
                 await refreshParentOfNode(selectedNodeKey);
@@ -275,6 +377,9 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         }
     };
 
+    /**
+     * Opens the rename dialog and pre-fills it with the current folder's name.
+     */
     const openRenameDialog = () => {
         if (!selectedNodeKey) return;
         const node = findNodeByKey(nodes, selectedNodeKey);
@@ -285,6 +390,9 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         }
     };
 
+    /**
+     * Handles the folder rename submission. Sends a PUT request with the new name.
+     */
     const handleRenameFolder = async () => {
         if (!newFolderName || !currentNodeToRename) return;
 
@@ -304,8 +412,10 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
             setIsRenameDialogVisible(false);
             setNewFolderName('');
             
+            // Refresh the parent to show the renamed folder.
             await refreshParentOfNode(currentNodeToRename.key);
             
+            // Reset selection state.
             setSelectedNodeKey(null);
             setFiles([]);
 
@@ -314,23 +424,29 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         }
     };
 
-    // --- INIZIO MODIFICA: Handler per il refresh manuale ---
+    /**
+     * Handles the click on the refresh button.
+     * It refreshes the currently selected folder, or the entire tree if no folder is selected.
+     */
     const handleManualRefresh = useCallback(() => {
-        if (loading) return; // Previene refresh multipli
+        if (loading) return; // Prevent multiple refreshes.
 
         if (selectedNodeKey) {
-            // Se una cartella è selezionata, ricarica solo quella
+            // If a folder is selected, refresh only its content.
             toast.current.show({ severity: 'info', summary: 'Refreshing', detail: 'Updating current folder content...', life: 2000 });
             refreshCurrentNodeContent();
         } else {
-            // Altrimenti, ricarica l'intero albero dalla radice
+            // Otherwise, refresh the entire tree from the root.
             toast.current.show({ severity: 'info', summary: 'Refreshing', detail: 'Updating folder tree...', life: 2000 });
             fetchRoots();
         }
     }, [loading, selectedNodeKey, refreshCurrentNodeContent]);
-    // --- FINE MODIFICA ---
     
     // --- JSX TEMPLATES ---
+
+    /**
+     * Template for rendering the action buttons (Preview, Download, Delete) for each file in the DataTable.
+     */
     const fileActionTemplate = (rowData) => (
         <div className="flex gap-2">
             <Button icon="pi pi-eye" className="p-button-rounded p-button-info p-button-sm" tooltip="Preview" onClick={() => handlePreviewFile(rowData)} />
@@ -339,32 +455,44 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         </div>
     );
     
+    /**
+     * Template for rendering a node (file or folder) with an appropriate icon and label.
+     * Used in both the Tree and the DataTable.
+     */
     const nodeTemplate = (node) => {
         if (node.type === 'separator') return <Divider className="my-2" />;
         const icon = node.type === 'folder' ? "pi pi-folder" : "pi pi-file";
         return <div className="flex align-items-center"><i className={`${icon} mr-2`}></i><span>{node.label}</span></div>;
     };
 
-    // --- INIZIO MODIFICA: Aggiunto pulsante di refresh alla Toolbar ---
+    /**
+     * Defines the content for the start section of the Toolbar (folder actions).
+     */
     const folderActions = (
         <div className="flex-grow-1 flex gap-2">
+            {/* Disable actions if no folder is selected or if the selected folder is a root directory */}
             <Button label="Rename Folder" icon="pi pi-pencil" className="p-button-sm" onClick={openRenameDialog} disabled={!selectedNodeKey || !getRelativePath(selectedNodeKey)} />
             <Button label="Download Folder" icon="pi pi-download" className="p-button-sm p-button-success" onClick={handleDownloadFolder} disabled={!selectedNodeKey || !getRelativePath(selectedNodeKey)} />
             <Button label="Delete Folder" icon="pi pi-trash" className="p-button-sm p-button-danger" onClick={handleDeleteFolder} disabled={!selectedNodeKey || !getRelativePath(selectedNodeKey)} />
         </div>
     );
     
+    /**
+     * Defines the content for the end section of the Toolbar (refresh button).
+     */
     const endToolbarContent = (
         <Button 
             icon="pi pi-refresh" 
             className="p-button-sm p-button-secondary" 
             tooltip="Refresh View" 
             onClick={handleManualRefresh} 
-            loading={loading}
+            loading={loading} // Show a loading spinner on the button while fetching.
         />
     );
-    // --- FINE MODIFICA ---
 
+    /**
+     * Defines the footer buttons for the rename dialog.
+     */
     const renameDialogFooter = (
         <>
             <Button label="Cancel" icon="pi pi-times" className="p-button-text" onClick={() => setIsRenameDialogVisible(false)} />
@@ -372,18 +500,30 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         </>
     );
 
+    // --- RENDER ---
     return (
         <Panel header="File System Explorer" toggleable pt={{ content: { className: 'p-1' } }}>
-            {/* --- INIZIO MODIFICA: Aggiornata la Toolbar --- */}
             <Toolbar start={folderActions} end={endToolbarContent} className="border-none mb-2"/>
-            {/* --- FINE MODIFICA --- */}
             <Toast ref={toast} />
             <Splitter style={{ minHeight: '400px' }} className="border-1 surface-border">
+                {/* Left Panel: Folder Tree */}
                 <SplitterPanel size={40} className="flex flex-col">
                     <div className="w-full flex-grow-1 overflow-auto">
-                        <Tree value={nodes} loading={loading} selectionMode="single" selectionKeys={selectedNodeKey} onSelect={(e) => onSelect(e.node)} onExpand={onExpand} expandedKeys={expandedKeys} onCollapse={(e) => setExpandedKeys(e.expandedKeys)} nodeTemplate={nodeTemplate} className="w-full border-none" />
+                        <Tree 
+                            value={nodes} 
+                            loading={loading} 
+                            selectionMode="single" 
+                            selectionKeys={selectedNodeKey} 
+                            onSelect={onSelect} 
+                            onExpand={onExpand} 
+                            expandedKeys={expandedKeys} 
+                            onCollapse={(e) => setExpandedKeys(e.expandedKeys)} 
+                            nodeTemplate={nodeTemplate} 
+                            className="w-full border-none" 
+                        />
                     </div>
                 </SplitterPanel>
+                {/* Right Panel: File Table */}
                 <SplitterPanel size={60} className="flex flex-col">
                     <div className="w-full flex-grow-1">
                         <DataTable 
@@ -397,6 +537,7 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
                             selection={selectedFile}
                             onSelectionChange={(e) => {
                                 setSelectedFile(e.value);
+                                // Trigger the optional onFileSelect callback prop.
                                 if (onFileSelect) {
                                     onFileSelect(e.value);
                                 }
@@ -410,12 +551,14 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
                 </SplitterPanel>
             </Splitter>
 
+            {/* File Preview Dialog */}
             <Dialog header={`Preview: ${previewFileName}`} visible={isPreviewDialogVisible} style={{ width: '70vw' }} modal onHide={() => setIsPreviewDialogVisible(false)}>
                 <ScrollPanel style={{ width: '100%', height: '400px' }}>
                     <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{previewContent}</pre>
                 </ScrollPanel>
             </Dialog>
 
+            {/* Folder Rename Dialog */}
             <Dialog header="Rename Folder" visible={isRenameDialogVisible} style={{ width: '30vw' }} modal footer={renameDialogFooter} onHide={() => setIsRenameDialogVisible(false)}>
                 <div className="flex flex-col gap-2">
                     <label htmlFor="folderName">New folder name</label>

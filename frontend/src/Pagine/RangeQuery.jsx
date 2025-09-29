@@ -239,6 +239,28 @@ function RangeQuery() {
         }
     };
 
+    // Copies the values from the last inserted query into the input fields.
+    const copyLastQuery = () => {
+        if (queries.length === 0) {
+            toast.current.show({ severity: 'info', summary: 'Info', detail: 'No queries in the table to copy.', life: 3000 });
+            return;
+        }
+
+        const lastQuery = queries[queries.length - 1];
+
+        // Set state for all form fields using values from the last query.
+        setSelectedDatasetForQuery(lastQuery.datasetName);
+        setNumQuery(lastQuery.numQuery);
+        setQueryArea(lastQuery.queryArea);
+        setMinX(lastQuery.minX);
+        setMinY(lastQuery.minY);
+        setMaxX(lastQuery.maxX);
+        setMaxY(lastQuery.maxY);
+        setAreaint(lastQuery.areaint);
+        
+        toast.current.show({ severity: 'success', summary: 'Copied', detail: 'Last query values have been copied to the form.', life: 3000 });
+    };
+
     // --- RENDER HELPERS ---
 
     // Renders the footer for the progress dialog.
@@ -290,6 +312,7 @@ function RangeQuery() {
                                 <FloatLabel><InputNumber inputId="maxX" value={maxX} onValueChange={(e) => setMaxX(e.value)} /><label htmlFor="maxX">Max X</label></FloatLabel>
                                 <FloatLabel><InputNumber inputId="maxY" value={maxY} onValueChange={(e) => setMaxY(e.value)} /><label htmlFor="maxY">Max Y</label></FloatLabel>
                                 <FloatLabel><InputNumber inputId="areaint" value={areaint} onValueChange={(e) => setAreaint(e.value)} /><label htmlFor="areaint">Area Intersection</label></FloatLabel>
+                                <div className='flex justify-content-end flex-wrap'><Button onClick={copyLastQuery} disabled={queries.length === 0} icon="pi pi-copy" tooltip="Copy Last Query" className="p-button-secondary" /></div>
                                 <div className='flex justify-content-end flex-wrap'><Button onClick={insertQuery} disabled={!selectedFolder || selectedFolderBaseDir !== 'parent_dir_dataset'}>Insert Query</Button></div>
                                 <div className="flex justify-content-end flex-wrap"><Button onClick={generateQueries} disabled={!selectedFolder || selectedFolderBaseDir !== 'parent_dir_dataset' || queries.length === 0}>Submit</Button></div>
                             </div>

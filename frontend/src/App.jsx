@@ -7,6 +7,7 @@ import Histogram from './Pagine/Histogram';
 import RangeQuery from './Pagine/RangeQuery';
 import RankDiff from './Pagine/RankDiff';
 import Augmentation from './Pagine/Augmentation';
+import FractalDimension from './Pagine/FractalDimension';
 
 function App() {
   // console.log("App - Render");
@@ -20,6 +21,7 @@ function App() {
         <Route path='range' element={<RangeQuery/>}/>
         <Route path='/rank' element={<RankDiff/>}/>
         <Route path='/augmentation' element={<Augmentation/>}/>
+        <Route path='/fractal' element={<FractalDimension/>}/>
       </Routes>
     </main>
   );

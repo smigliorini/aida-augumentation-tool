@@ -14,7 +14,9 @@ function MyMenu(){
         {label: "3.Range Query", icon: 'pi pi-search', command: () => navigate('/range')},
         {label: "4.Balancing Analysis", icon: 'pi pi-wrench', command: () => navigate('/rank')},
         {label: "5.Spatial Augmentation", icon: 'pi pi-arrow-circle-up', command: () => navigate('/augmentation')},
-        {label: "6.Histogram", icon: 'pi pi-chart-bar', command: () => navigate('/histogram')}
+        {label: "6.Histogram", icon: 'pi pi-chart-bar', command: () => navigate('/histogram')},
+        {label: "Fractal Dimension", icon: 'pi pi-cloud', command: () => navigate('/fractal')}
+
     ];
 
     const end = (

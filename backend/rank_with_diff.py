@@ -77,8 +77,8 @@ def csvReading(filePath):
 		values[3],			# nameRangeQueriesResult = nome del file in cui ci sono i risultati delle range queries
 		values[4],			# pathSummaries = percorso in cui trovare i sommari sui datasets
 		values[5],			# nameSummary = nome del file in cui ci sono i sommari sui datasets
-		values[6],			# pathFD = percorso
-		values[7]			# nameFD = nome file
+		values[6],			# pathFD = percorso dove trovare le dimansioni frattali calcolate
+		values[7:]			# nameFD = nomi dei file contenenti le dimensioni frattali
 	)
 
 
@@ -96,8 +96,8 @@ def main():
 		nameRangeQueriesResult,		# nome del file in cui ci sono i risultati delle range queries
 		pathSummaries,				# percorso in cui trovare i sommari sui datasets
 		nameSummary,				# nome del file in cui ci sono i sommari sui datasets
-		pathFD,						# percorso
-		nameFD						# nome file
+		pathFD,						# percorso dove trovare le dimansioni frattali calcolate
+		nameFD						# nomi dei file contenenti le dimensioni frattali
 	) = csvReading(fileInput)
 	# -------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -168,7 +168,7 @@ def main():
 	base = nameRangeQueriesResult.rsplit('.', 1)[0]					# rimuovo estensione "rqR_datasetsDate_UC.csv" --> "rqR_datasetsDate_UC"
 	parts = base.split('_')											# divido in base a "_"
 	result = '_'.join(parts[1:])									# prendo tutto tranne il primo pezzo : "rqR" "datasetsDate" "UC" --> "datasetsDate_UC"
-	pathFolderOutput = f"../trainingSets/{result}"					# "trainingSets/datasetsDate_UC" - impostato una cartella più indietro
+	pathFolderOutput = f"trainingSets/{result}"						# "trainingSets/datasetsDate_UC"
 
 	os.makedirs(pathFolderOutput, exist_ok=True)
 	for folder_name in os.listdir(pathFolderOutput):
@@ -229,24 +229,18 @@ def main():
 			else:												# altre linee --> solo in Diff
 				outputDiff.write(line)
 
-	# 3. Inserimento di "fd2_geom_allds_ts.csv" e "fd2_geom_allds_diff.csv"
-	name, ext = os.path.splitext(nameFD)							# Estrazione del nome del file e la sua estensione
-	newNameTs = f"{name}_ts{ext}"									# Creazione del nuovo nome con '_ts'
-	newNameDiff = f"{name}_diff{ext}"								# Creazione del nuovo nome con '_diff'
-	newPathTs = os.path.join(newFolderTs, newNameTs)				# Percorso del nuovo file nella sottocartella (Ts)
-	newPathDiff = os.path.join(newFolderDiff, newNameDiff)			# Percorso del nuovo file nella sottocartella (Diff)
-	with open(f"{pathFD}/{nameFD}", "r", encoding="utf-8") as input, \
-		 open(newPathTs, "w", encoding="utf-8") as outputTs, \
-		 open(newPathDiff, "w", encoding="utf-8") as outputDiff:
-		
-		for i, line in enumerate(input):
-			if i == 0:											# intestazione --> sia in Ts che in Diff
-				outputTs.write(line)
-				outputDiff.write(line)
-			elif line.strip().split(";")[0] in datasets:		# linea dataset --> solo in Ts
-				outputTs.write(line)
-			else:												# altre linee --> solo in Diff
-				outputDiff.write(line)
+	# 3. Inserimento di "fd_sum_....csv" e "fd_rqR_....csv" (solo se esistono)
+	if nameFD:
+		for file in nameFD:
+			newPathTs = os.path.join(newFolderTs, file)				# Percorso del nuovo file nella sottocartella (Ts)
+			newPathDiff = os.path.join(newFolderDiff, file)			# Percorso del nuovo file nella sottocartella (Diff)
+			with open(f"{pathFD}/{file}", "r", encoding="utf-8") as input, \
+				open(newPathTs, "w", encoding="utf-8") as outputTs, \
+				open(newPathDiff, "w", encoding="utf-8") as outputDiff:
+				
+				for line in input:
+					outputTs.write(line)
+					outputDiff.write(line)
 
 	# 4. Inserimento di "bin_result_ts.csv"
 	binResult = f"bin_{nameRangeQueriesResult.replace('rqR_', '').replace('.csv', '')}"	# file di output dove salvare gli intervalli bin (bin_nameDataset)

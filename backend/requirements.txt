@@ -5,3 +5,4 @@ pandas
 psutil
 eventlet
 Rtree
+scipy

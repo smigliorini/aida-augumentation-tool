@@ -1180,8 +1180,11 @@ def main():
 				file_index = row.name					# salvataggio dell'indice della riga in questione
 				dataset_name = row['datasetName']		# nome del dataset da modificare o duplicare
 
+				print(f"DEBUG: Il valore di pathTrainingSet ricevuto è: '{pathTrainingSet}'")
+
 				# definizione della cartella dove caricare i datasets generati dalle tecniche di augmentation! Se la cartella non esiste, la creo
-				folder_output = os.path.join("datasetsAugmentation", '/'.join(pathTrainingSet.split('/')[1:]))
+				training_set_folder_name = os.path.basename(os.path.dirname(pathTrainingSet))
+				folder_output = os.path.join("datasetsAugmentation", training_set_folder_name)
 				if not os.path.exists(folder_output):		
 					os.makedirs(folder_output)
 
@@ -1208,7 +1211,6 @@ def main():
 				"""
 				# Selezione di una tecnica casuale pesata
 				chosen_technique = random.choices(list(probabilities.keys()), weights=list(probabilities.values()))[0]
-				chosen_technique = "merge"
 				print(f"<System> The technique used for augmentation is '{chosen_technique}'.")
 				
 				# -------------------------------------------------------------------------------------------------------------------------------------------

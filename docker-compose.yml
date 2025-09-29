@@ -27,3 +27,4 @@ services:
       - ./trainingSets:/data/trainingSets
       - ./augmentation_logs:/data/augmentation_logs
       - ./datasetsAugmentation:/data/datasetsAugmentation
+      - ./fractalDimension:/data/fractalDimension
