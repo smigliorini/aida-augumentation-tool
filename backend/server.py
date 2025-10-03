@@ -21,6 +21,8 @@ import uuid
 import zipfile
 from datetime import datetime
 import threading
+import glob
+import re
 
 # Third-party Library Imports
 import pandas as pd
@@ -1241,6 +1243,7 @@ def generate_data_from_csv(data):
             param_map = {
                 'distribution': 'distribution', 'num_features': 'cardinality',
                 'avg_area': 'polysize', 'geometry': 'geometry', 'max_seg': 'maxseg'
+
             }
             for csv_col, script_arg in param_map.items():
                 if row.get(csv_col): cmd.append(f"{script_arg}={shlex.quote(row[csv_col])}")
@@ -1773,10 +1776,111 @@ def run_fractal_dimension_socket(data):
         stop_monitoring_event.set()
 
 
+@app.route('/api/fractal/sources', methods=['GET'])
+def get_fractal_sources():
+    """
+    Scans all relevant directories to find unique base dataset IDs.
+    Example: 'fd_rqR_dataset_123_ts.csv' -> 'dataset_123'
+    """
+    all_files = []
+    unique_ids = set()
+
+    # Paths to scan for result files
+    paths_to_scan = [
+        os.path.join(PARENT_DIRS['parent_dir_input_ds'], 'input_params_*.csv'),
+        os.path.join(PARENT_DIRS['fractalDimension'], 'fd_*.csv')
+    ]
+
+    for path in paths_to_scan:
+        all_files.extend(glob.glob(path))
+
+    # Regex to extract the base dataset ID from a filename
+    # It captures the 'dataset_YYYYMMDD_HHMMSS_UUID' part
+    id_pattern = re.compile(r'(dataset_\d{8}_\d{6}_[0-9a-fA-F]{8})')
+
+    for f in all_files:
+        match = id_pattern.search(os.path.basename(f))
+        if match:
+            unique_ids.add(match.group(1))
+    
+    return jsonify(sorted(list(unique_ids)))
+
+
+@app.route('/api/fractal/data', methods=['POST'])
+def get_fractal_data():
+    """
+    For each selected dataset ID, this function finds all related Fractal Dimension (FD) 
+    result files and returns a dictionary where each key is a dataset_id and its value 
+    is a list of all associated fractal data points.
+    """
+    selected_ids = request.json.get('dataset_ids', [])
+    if not selected_ids:
+        return jsonify({})
+
+    # The main dictionary to hold all results, keyed by dataset_id
+    results_by_dataset = {}
+
+    for dataset_id in selected_ids:
+        # This list will store all results for the current dataset_id
+        current_dataset_results = []
+        
+        # --- Step 1: Find ORIGINAL data for the current dataset_id ---
+        try:
+            # E2 value from the main summary file in 'parent_dir_input_ds'
+            summary_path = os.path.join(PARENT_DIRS['parent_dir_input_ds'], f"input_params_{dataset_id}.csv")
+            if os.path.exists(summary_path):
+                df = pd.read_csv(summary_path, delimiter=';')
+                if 'E2' in df.columns and not df['E2'].dropna().empty:
+                    current_dataset_results.append({'parameter': 'E2', 'source': 'Original', 'value': float(df['E2'].dropna().iloc[0])})
+
+            # FD parameters from the fractalDimension folder (related to the original summary)
+            fd_summary_path = os.path.join(PARENT_DIRS['fractalDimension'], f"fd_input_params_{dataset_id}.csv")
+            if os.path.exists(fd_summary_path):
+                df = pd.read_csv(fd_summary_path, delimiter=';')
+                if not df.empty:
+                    for param, value in df.iloc[0].dropna().to_dict().items():
+                        current_dataset_results.append({'parameter': param, 'source': 'Original', 'value': float(value)})
+            
+            # FD parameters from the fractalDimension folder (related to the original range query results)
+            fd_rq_path = os.path.join(PARENT_DIRS['fractalDimension'], f"fd_rqR_{dataset_id}.csv")
+            if os.path.exists(fd_rq_path):
+                df = pd.read_csv(fd_rq_path, delimiter=';')
+                if not df.empty:
+                    for param, value in df.iloc[0].dropna().to_dict().items():
+                        current_dataset_results.append({'parameter': param, 'source': 'Original', 'value': float(value)})
+
+        except Exception as e:
+            logging.error(f"Error processing ORIGINAL files for {dataset_id}: {e}")
+
+        # --- Step 2: Find TRAINING SET data for the current dataset_id ---
+        try:
+            ts_files = glob.glob(os.path.join(PARENT_DIRS['fractalDimension'], f"fd_rqR_{dataset_id}_ts*.csv"))
+            for f_path in ts_files:
+                filename = os.path.basename(f_path)
+                match = re.search(r'_ts(\d*)\.csv', filename)
+                ts_number = match.group(1) if match and match.group(1) else ''
+                source_name = f"Training Set {ts_number}".strip()
+
+                df = pd.read_csv(f_path, delimiter=';')
+                if not df.empty:
+                    for param, value in df.iloc[0].dropna().to_dict().items():
+                        current_dataset_results.append({'parameter': param, 'source': source_name, 'value': float(value)})
+        except Exception as e:
+             logging.error(f"Error processing TRAINING SET files for {dataset_id}: {e}")
+
+        # Add the collected results for this dataset_id to the main dictionary
+        if current_dataset_results:
+            results_by_dataset[dataset_id] = current_dataset_results
+
+    return jsonify(results_by_dataset)
+
+
 # ==============================================================================
 # --- MAIN EXECUTION BLOCK ---
 # ==============================================================================
 
 if __name__ == '__main__':
+    # Read ambient variable 'PORT', if not defined use '5000' as default
+    port = int(os.environ.get('PORT', 5000))
     # Starts the Flask-SocketIO development server.
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=port, debug=True)

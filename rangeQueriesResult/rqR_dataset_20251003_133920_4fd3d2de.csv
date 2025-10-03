@@ -1,0 +1,2 @@
+datasetName;numQuery;queryArea;minX;minY;maxX;maxY;areaint;cardinality;executionTime;mbrTests
+dataset1;100;3.61;0.1;0.1;2.0;2.0;3.61;0.813;1454;10000

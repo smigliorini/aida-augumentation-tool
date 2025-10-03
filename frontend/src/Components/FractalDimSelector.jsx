@@ -3,6 +3,9 @@ import axios from 'axios';
 import { Tree } from 'primereact/tree';
 import { ProgressSpinner } from 'primereact/progressspinner';
 import { Message } from 'primereact/message';
+// Import the base URL for API calls.
+import { API_BASE_URL } from '../socket';
+
 /**
  * AdHoc components for handling Fractal Dimension types of executions
  * This components only purpose is to select and pass to the server a file or a folder based on the selected type of analysis
@@ -19,7 +22,7 @@ function FractalDimSelector({ rootKey, selectedKey, onSelect, expandedKeys, onEx
         }
 
         setLoading(true);
-        axios.get('http://localhost:5000/api/explorer/roots')
+        axios.get(`${API_BASE_URL}/api/explorer/roots`)
             .then(response => {
                 const rootNodes = response.data;
                 const filteredNodes = rootNodes.filter(node => node.key === rootKey);
@@ -38,7 +41,7 @@ function FractalDimSelector({ rootKey, selectedKey, onSelect, expandedKeys, onEx
         // Lazy load children if they haven't been loaded yet
         if (!node.children || node.children.length === 0) {
             setLoading(true);
-            axios.get(`http://localhost:5000/api/explorer/content?path=${node.data.path}`)
+            axios.get(`${API_BASE_URL}/api/explorer/content?path=${node.data.path}`)
                 .then(res => {
                     const children = res.data;
                     let newNodes = JSON.parse(JSON.stringify(nodes));

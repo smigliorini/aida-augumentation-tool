@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { socket } from '../socket';
+// Import the centralized socket instance and the base URL for API calls.
+import { socket, API_BASE_URL } from '../socket';
 import MyMenu from "../Components/MyMenu";
 import { Divider } from "primereact/divider";
 import { Button } from "primereact/button";
@@ -120,7 +121,7 @@ function Index() {
             return;
         }
         try {
-            const response = await fetch(`http://localhost:5000/api/explorer/content?path=${parentDir}/${folderName}`);
+            const response = await fetch(`${API_BASE_URL}/api/explorer/content?path=${parentDir}/${folderName}`);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             const data = await response.json();
             const files = data.filter(item => item.type === 'file' && (item.label.endsWith('.csv') || item.label.endsWith('.wkt') || item.label.endsWith('.geojson')))
@@ -162,7 +163,7 @@ function Index() {
 
         try {
             // This HTTP request triggers the indexing process on the backend.
-            const response = await fetch('http://localhost:5000/process_spatial_index', {
+            const response = await fetch(`${API_BASE_URL}/process_spatial_index`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

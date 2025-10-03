@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
-import { io } from 'socket.io-client';
+// The direct import of 'io' is no longer needed.
+// import { io } from 'socket.io-client';
 import { Dialog } from 'primereact/dialog';
 import { ProgressBar } from 'primereact/progressbar';
 
@@ -19,6 +20,9 @@ import { MultiSelect } from 'primereact/multiselect';
 import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
 import { Tag } from 'primereact/tag';
+// Import the centralized socket instance and API base URL.
+import { socket, API_BASE_URL } from '../socket';
+
 
 // Main component for the data augmentation process.
 function Augmentation() {
@@ -49,9 +53,9 @@ function Augmentation() {
     const [errorSummary, setErrorSummary] = useState('');
     const [errorDetails, setErrorDetails] = useState('');
     
-    // Refs for toast notifications and WebSocket connection.
+    // Refs for toast notifications. The WebSocket connection is now managed by the imported instance.
     const toast = useRef(null);
-    const socket = useRef(null);
+    // const socket = useRef(null);
 
     // State for progress dialog and resource monitoring.
     const [showProgressDialog, setShowProgressDialog] = useState(false);
@@ -71,23 +75,23 @@ function Augmentation() {
 
     // Effect for establishing and managing the WebSocket connection.
     useEffect(() => {
-        socket.current = io('http://localhost:5000');
+        socket.connect();
 
-        socket.current.on('connect', () => console.log('Socket.IO connected for Augmentation page'));
+        socket.on('connect', () => console.log('Socket.IO connected for Augmentation page'));
         
         // Listen for real-time resource usage updates.
-        socket.current.on('resource_usage', (data) => {
+        socket.on('resource_usage', (data) => {
             setCpuUsage(data.cpu);
             setRamUsage(data.ram);
         });
 
         // Listen for progress updates during the augmentation process.
-        socket.current.on('augmentation_progress', (data) => {
+        socket.on('augmentation_progress', (data) => {
             setProgressInfo({ current: data.current, total: data.total, message: data.message });
         });
 
         // Handle successful completion of the augmentation process.
-        socket.current.on('augmentation_complete', (data) => {
+        socket.on('augmentation_complete', (data) => {
             const successDetail = data.logFile 
                 ? `Process finished. Log saved to: ${data.logFile}`
                 : 'Process finished successfully.';
@@ -98,7 +102,7 @@ function Augmentation() {
         });
 
         // Handle errors reported by the server.
-        socket.current.on('augmentation_error', (data) => {
+        socket.on('augmentation_error', (data) => {
             const summary = data.error || "An unexpected error occurred.";
             const details = data.details || 'No additional details provided.';
             
@@ -112,7 +116,7 @@ function Augmentation() {
 
         // Cleanup: Disconnect the socket when the component unmounts.
         return () => {
-            if (socket.current) socket.current.disconnect();
+            socket.disconnect();
         };
     }, []);
 
@@ -127,7 +131,7 @@ function Augmentation() {
 
         // Fetch the content of the selected bin file for preview.
         setLoading(true);
-        axios.get(`http://localhost:5000/api/augmentation/bin-file-content`, { params: { path: selectedBinFile.data.path } })
+        axios.get(`${API_BASE_URL}/api/augmentation/bin-file-content`, { params: { path: selectedBinFile.data.path } })
             .then(response => {
                 const data = response.data; setBinFileContent(data);
                 if (data && data.length > 0) {
@@ -146,7 +150,7 @@ function Augmentation() {
 
         // Fetch the available distribution types based on the selected bin file.
         setDistributionsLoading(true); setCurrentDistribution(null);
-        axios.get(`http://localhost:5000/api/augmentation/distributions`, { params: { bin_file_path: selectedBinFile.data.path } })
+        axios.get(`${API_BASE_URL}/api/augmentation/distributions`, { params: { bin_file_path: selectedBinFile.data.path } })
             .then(response => {
                 const formattedOptions = response.data.map(dist => ({ label: dist.charAt(0).toUpperCase() + dist.slice(1), value: dist }));
                 setDistributionOptions(formattedOptions);
@@ -226,7 +230,7 @@ function Augmentation() {
             pathIndexes: `indexes/${uniqueCode}`,
             inputs: augmentationTasks,
         };
-        socket.current.emit('run_augmentation', payload);
+        socket.emit('run_augmentation', payload);
     };
 
     // --- RENDER HELPERS ---

@@ -1,0 +1,2 @@
+datasetName;numQuery;queryArea;minX;minY;maxX;maxY;areaint;cardinality;executionTime;mbrTests;cardinality_class
+dataset1;100;3.61;0.1;0.1;2.0;2.0;3.61;0.813;1454;10000;0.7317000000-0.8130000000

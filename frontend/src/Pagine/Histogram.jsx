@@ -8,8 +8,11 @@ import { Panel } from 'primereact/panel';
 // Imports for real-time feedback
 import { Dialog } from 'primereact/dialog';
 import { ProgressBar } from 'primereact/progressbar';
-import { io } from 'socket.io-client';
+// The direct import of 'io' is no longer needed.
+// import { io } from 'socket.io-client';
 import FileExplorer from '../Components/FileExplorer';
+// Import the centralized socket instance.
+import { socket } from '../socket';
 
 // Main component for generating histograms from dataset files.
 function Histogram() {
@@ -19,10 +22,12 @@ function Histogram() {
     const [selectedDatasetFolder, setSelectedDatasetFolder] = useState(null);
     const [selectedFolderParentDir, setSelectedFolderParentDir] = useState(null);
     const toast = useRef(null);
-    const backendUrl = 'http://localhost:5000';
+    // The backendUrl constant is no longer needed as the URL is managed in the socket module.
+    // const backendUrl = 'http://localhost:5000';
 
     // State for WebSocket, dialog visibility, and resource monitoring.
-    const socket = useRef(null);
+    // The socket ref is no longer needed; the imported instance is used directly.
+    // const socket = useRef(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [dialogVisible, setDialogVisible] = useState(false);
     const [progress, setProgress] = useState(0);
@@ -34,22 +39,23 @@ function Histogram() {
 
     // Effect hook to manage the WebSocket connection and its event listeners.
     useEffect(() => {
-        socket.current = io(backendUrl);
+        // Connect the centralized socket instance when the component mounts.
+        socket.connect();
 
         // Listen for progress updates from the server.
-        socket.current.on('histogram_progress', (data) => {
+        socket.on('histogram_progress', (data) => {
             setProgress(data.progress);
             setProgressMessage(`Processing file ${data.processed_count}/${data.total_count}: ${data.file_name}`);
         });
 
         // Listen for real-time resource usage updates.
-        socket.current.on('resource_usage', (data) => {
+        socket.on('resource_usage', (data) => {
             setCpuUsage(data.cpu);
             setRamUsage(data.ram);
         });
 
         // Handle the successful completion of the histogram generation.
-        socket.current.on('histogram_complete', (data) => {
+        socket.on('histogram_complete', (data) => {
             toast.current.show({ severity: 'success', summary: 'Success', detail: data.message, life: 7000 });
             setIsProcessing(false);
             setDialogVisible(false);
@@ -57,7 +63,7 @@ function Histogram() {
         });
 
         // Handle any errors that occur during the process.
-        socket.current.on('histogram_error', (data) => {
+        socket.on('histogram_error', (data) => {
             toast.current.show({ severity: 'error', summary: 'Error', detail: data.error, life: 7000 });
             setIsProcessing(false);
             setDialogVisible(false);
@@ -65,7 +71,7 @@ function Histogram() {
 
         // Cleanup: Disconnect the socket when the component unmounts.
         return () => {
-            if (socket.current) socket.current.disconnect();
+            socket.disconnect();
         };
     }, []); // The empty dependency array ensures this effect runs only once.
 
@@ -105,7 +111,7 @@ function Histogram() {
         setProgressMessage("Starting histogram processing...");
 
         // Emit the 'process_histograms' event to the backend with the selected folder name.
-        socket.current.emit('process_histograms', { folder_name: selectedDatasetFolder });
+        socket.emit('process_histograms', { folder_name: selectedDatasetFolder });
     };
 
     // --- RENDER ---

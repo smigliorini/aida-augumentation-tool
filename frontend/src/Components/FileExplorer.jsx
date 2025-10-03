@@ -11,6 +11,8 @@ import { ScrollPanel } from 'primereact/scrollpanel';
 import { Divider } from 'primereact/divider';
 import { InputText } from 'primereact/inputtext';
 import { Toolbar } from 'primereact/toolbar';
+// Import the base URL for API calls from the central socket configuration.
+import { API_BASE_URL } from '../socket';
 
 /**
  * FileExplorer Component
@@ -57,8 +59,8 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
 
     // Ref for the Toast component to show notifications programmatically.
     const toast = useRef(null);
-    // Base URL for the backend API.
-    const backendUrl = 'http://localhost:5000';
+    // The hardcoded backend URL is no longer needed. We use API_BASE_URL from the socket module.
+    // const backendUrl = 'http://localhost:5000';
 
     // --- HELPER FUNCTIONS ---
 
@@ -128,7 +130,7 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
      */
     const fetchRoots = () => {
         setLoading(true);
-        fetch(`${backendUrl}/api/explorer/roots`)
+        fetch(`${API_BASE_URL}/api/explorer/roots`)
             .then(res => res.json())
             .then(data => { setLoading(false); setNodes(data); })
             .catch(error => {
@@ -147,7 +149,7 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
     const loadNodeContent = useCallback(async (node) => {
         setLoading(true);
         try {
-            const response = await fetch(`${backendUrl}/api/explorer/content?path=${node.key}`);
+            const response = await fetch(`${API_BASE_URL}/api/explorer/content?path=${node.key}`);
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || `HTTP Error ${response.status}`);
@@ -269,7 +271,7 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         setIsPreviewDialogVisible(true);
         setPreviewContent('Loading...');
         try {
-            const response = await fetch(`${backendUrl}/preview/file/${relativePathForApi}?base_dir=${baseDir}`);
+            const response = await fetch(`${API_BASE_URL}/preview/file/${relativePathForApi}?base_dir=${baseDir}`);
             if (!response.ok) throw new Error(await response.text());
             const content = await response.text();
             setPreviewContent(content);
@@ -285,7 +287,7 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         const itemPath = rowData.data.path;
         const baseDir = getBaseDirFromPath(itemPath);
         const relativePathForApi = getRelativePath(itemPath);
-        window.location.href = `${backendUrl}/download/${relativePathForApi}?base_dir=${baseDir}`;
+        window.location.href = `${API_BASE_URL}/download/${relativePathForApi}?base_dir=${baseDir}`;
     }, []);
 
     /**
@@ -297,7 +299,7 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
             const baseDir = getBaseDirFromPath(itemPath);
             const relativePathForApi = getRelativePath(itemPath);
             try {
-                const response = await fetch(`${backendUrl}/api/folders/${relativePathForApi}?base_dir=${baseDir}`, { method: 'DELETE' });
+                const response = await fetch(`${API_BASE_URL}/api/folders/${relativePathForApi}?base_dir=${baseDir}`, { method: 'DELETE' });
                 if (!response.ok) throw new Error((await response.json()).error || 'Deletion failed');
                 toast.current.show({ severity: 'success', summary: 'Success', detail: `File "${rowData.label}" deleted.` });
                 refreshCurrentNodeContent(); // Refresh the file list.
@@ -322,12 +324,12 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
 
         try {
             // Step 1: Request the backend to create a zip file.
-            const zipResponse = await fetch(`${backendUrl}/zip/folder/${relativePath}?base_dir=${baseDir}`);
+            const zipResponse = await fetch(`${API_BASE_URL}/zip/folder/${relativePath}?base_dir=${baseDir}`);
             if (!zipResponse.ok) throw new Error((await zipResponse.json()).error || 'Failed to create zip file.');
             const { zip_filename } = await zipResponse.json();
 
             // Step 2: Trigger the download of the created zip file.
-            const downloadUrl = `${backendUrl}/download/${zip_filename}?base_dir=${baseDir}`;
+            const downloadUrl = `${API_BASE_URL}/download/${zip_filename}?base_dir=${baseDir}`;
             const link = document.createElement('a');
             link.href = downloadUrl;
             link.setAttribute('download', zip_filename);
@@ -339,7 +341,7 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
             // so it can clean up the temporary zip file.
             setTimeout(async () => {
                 try {
-                    await fetch(`${backendUrl}/download/confirm/${zip_filename}?base_dir=${baseDir}`, { method: 'POST' });
+                    await fetch(`${API_BASE_URL}/download/confirm/${zip_filename}?base_dir=${baseDir}`, { method: 'POST' });
                 } catch (confirmError) {
                     console.error("Failed to confirm download for cleanup:", confirmError);
                 }
@@ -361,7 +363,7 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
             const relativePath = getRelativePath(selectedNodeKey);
             
             try {
-                const response = await fetch(`${backendUrl}/api/folders/${relativePath}?base_dir=${baseDir}`, { method: 'DELETE' });
+                const response = await fetch(`${API_BASE_URL}/api/folders/${relativePath}?base_dir=${baseDir}`, { method: 'DELETE' });
                 if (!response.ok) throw new Error((await response.json()).error || 'Deletion failed');
                 
                 toast.current.show({ severity: 'success', summary: 'Success', detail: `Folder "${node.label}" deleted.` });
@@ -400,7 +402,7 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         const baseDir = getBaseDirFromPath(currentNodeToRename.key);
         
         try {
-            const response = await fetch(`${backendUrl}/api/folders/${oldPath}?base_dir=${baseDir}`, {
+            const response = await fetch(`${API_BASE_URL}/api/folders/${oldPath}?base_dir=${baseDir}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ newName: newFolderName, baseDir: baseDir }),

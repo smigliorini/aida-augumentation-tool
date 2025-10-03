@@ -4,7 +4,8 @@ import { FloatLabel } from 'primereact/floatlabel';
 import { InputNumber } from 'primereact/inputnumber';
 import { Button } from 'primereact/button';
 import { ProgressBar } from 'primereact/progressbar';
-import { io } from 'socket.io-client';
+// The direct import of 'io' is no longer needed.
+// import { io } from 'socket.io-client';
 import { Toast } from 'primereact/toast';
 import MyMenu from '../Components/MyMenu';
 import { Divider } from 'primereact/divider';
@@ -15,6 +16,9 @@ import { Column } from 'primereact/column';
 import { Dialog } from 'primereact/dialog';
 import { Dropdown } from 'primereact/dropdown';
 import FileExplorer from '../Components/FileExplorer';
+// Import the centralized socket instance and API base URL.
+import { socket, API_BASE_URL } from '../socket';
+
 
 // Main component for generating and executing range queries.
 function RangeQuery() {
@@ -36,7 +40,8 @@ function RangeQuery() {
     const [result, setResult] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const socket = useRef(null);
+    // The socket ref is no longer needed; the imported instance is used directly.
+    // const socket = useRef(null);
     const [progress, setProgress] = useState(0);
     const toast = useRef(null);
 
@@ -84,7 +89,7 @@ function RangeQuery() {
             return;
         }
         try {
-            const response = await fetch(`http://127.0.0.1:5000/api/explorer/content?path=${parentDir}/${folderName}`);
+            const response = await fetch(`${API_BASE_URL}/api/explorer/content?path=${parentDir}/${folderName}`);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             const data = await response.json();
             const files = data.filter(item => item.type === 'file' && (item.label.endsWith('.csv') || item.label.endsWith('.wkt')))
@@ -107,23 +112,23 @@ function RangeQuery() {
 
     // Effect hook to manage the WebSocket connection.
     useEffect(() => {
-        socket.current = io('http://127.0.0.1:5000');
+        socket.connect();
         
         // Listens for query progress updates from the server.
-        socket.current.on('range_query_progress', (data) => {
+        socket.on('range_query_progress', (data) => {
             setProgress(data.progress);
             setQueryProgressMessage(`Processed: ${data.current_dataset} (${data.processed_count}/${data.total_count})`);
             if (!showProgressDialog) setShowProgressDialog(true);
         });
 
         // Listens for real-time CPU and RAM data.
-        socket.current.on('resource_usage', (data) => {
+        socket.on('resource_usage', (data) => {
             setCpuUsage(data.cpu);
             setRamUsage(data.ram);
         });
     
         // Handles query generation errors from the server.
-        socket.current.on('generate_query_error', (data) => {
+        socket.on('generate_query_error', (data) => {
             toast.current.show({ severity: 'error', summary: 'Error', detail: data.error, life: 5000 });
             setIsQueryExecuting(false);
             setShowProgressDialog(false);
@@ -132,7 +137,7 @@ function RangeQuery() {
         });
     
         // Handles the completion of the query generation process.
-        socket.current.on('generate_query_complete', (data) => {
+        socket.on('generate_query_complete', (data) => {
             toast.current.show({ severity: 'success', summary: 'Success', detail: 'Range Query completed successfully!', life: 5000 });
             setIsQueryExecuting(false);
             setOutputFolderName(data.output_folder_name);
@@ -143,7 +148,7 @@ function RangeQuery() {
     
         // Cleanup function to disconnect the socket when the component unmounts.
         return () => {
-            if (socket.current) socket.current.disconnect();
+            socket.disconnect();
         };
     }, []);
 
@@ -197,10 +202,10 @@ function RangeQuery() {
             return;
         }
         
-        if (socket.current && socket.current.connected) {
+        if (socket.connected) {
             startQueryExecution();
             // Callback to confirm the server received the request
-            socket.current.emit('generate_queries', { queries, folder: selectedFolder }, (response) => {
+            socket.emit('generate_queries', { queries, folder: selectedFolder }, (response) => {
                 if (response && response.status === 'started') {
                     console.log('Server confirmed: Range Query process started.');
                 } else {
@@ -222,9 +227,9 @@ function RangeQuery() {
             return;
         }
     
-        if (socket.current && socket.current.connected) {
+        if (socket.connected) {
             startQueryExecution();
-            socket.current.emit('generate_queries_from_csv', { csvFile, folder: selectedFolder }, (response) => {
+            socket.emit('generate_queries_from_csv', { csvFile, folder: selectedFolder }, (response) => {
                 if (response && response.status === 'started') {
                     console.log('Server confirmed: Range Query process from CSV started.');
                 } else {

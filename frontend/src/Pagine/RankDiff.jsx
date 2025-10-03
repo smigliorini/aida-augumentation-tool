@@ -8,10 +8,13 @@ import { Dialog } from 'primereact/dialog';
 import { ScrollPanel } from 'primereact/scrollpanel';
 import { Message } from 'primereact/message';
 import { Divider } from 'primereact/divider';
-import { io } from 'socket.io-client';
+// The direct import of 'io' is no longer needed.
+// import { io } from 'socket.io-client';
 import { ProgressBar } from 'primereact/progressbar';
 import MyMenu from '../Components/MyMenu';
 import FileExplorer from '../Components/FileExplorer';
+// Import the centralized socket instance.
+import { socket } from '../socket';
 
 // Main component for the Balancing Analysis (Rank & Diff) functionality.
 function RankDiff() {
@@ -30,7 +33,8 @@ function RankDiff() {
     const [dialogMessage, setDialogMessage] = useState('');
 
     // State for WebSocket communication and resource monitoring.
-    const socket = useRef(null);
+    // The socket ref is no longer needed; the imported instance is used directly.
+    // const socket = useRef(null);
     const [cpuUsage, setCpuUsage] = useState(0);
     const [ramUsage, setRamUsage] = useState(0);
 
@@ -47,17 +51,17 @@ function RankDiff() {
 
     // Effect hook to establish and manage the WebSocket connection.
     useEffect(() => {
-        // Initialize the socket connection when the component mounts.
-        socket.current = io('http://localhost:5000');
+        // Connect the centralized socket instance when the component mounts.
+        socket.connect();
 
         // Listen for real-time resource usage updates from the server.
-        socket.current.on('resource_usage', (data) => {
+        socket.on('resource_usage', (data) => {
             setCpuUsage(data.cpu);
             setRamUsage(data.ram);
         });
 
         // Listen for the successful completion of the Rank & Diff process.
-        socket.current.on('rank_diff_complete', (data) => {
+        socket.on('rank_diff_complete', (data) => {
             setDialogMessage(`Operation completed successfully!\n\nDetails: ${data.details}\n\n--- SCRIPT OUTPUT ---\n${data.output}`);
             toast.current.show({ severity: 'success', summary: 'Success', detail: data.message, life: 5000 });
             setSelectedRqResultFile(null); // Reset file selection on success.
@@ -65,7 +69,7 @@ function RankDiff() {
         });
 
         // Listen for any errors that occur during the process.
-        socket.current.on('rank_diff_error', (data) => {
+        socket.on('rank_diff_error', (data) => {
             setDialogMessage(`Error: ${data.error}\n\n--- SCRIPT OUTPUT ---\n${data.output || 'No output.'}`);
             toast.current.show({ severity: 'error', summary: 'Backend Error', detail: data.error, life: 8000 });
             setLoading(false);
@@ -73,9 +77,7 @@ function RankDiff() {
 
         // Cleanup function to disconnect the socket when the component is unmounted.
         return () => {
-            if (socket.current) {
-                socket.current.disconnect();
-            }
+            socket.disconnect();
         };
     }, []); // The empty dependency array ensures this effect runs only once.
     
@@ -108,9 +110,7 @@ function RankDiff() {
         };
         
         // Emits the 'run_rank_diff' event to the server with the payload.
-        if (socket.current) {
-            socket.current.emit('run_rank_diff', payload);
-        }
+        socket.emit('run_rank_diff', payload);
     };
 
     // --- RENDER ---

@@ -5,7 +5,8 @@ import { FloatLabel } from 'primereact/floatlabel';
 import { InputNumber } from 'primereact/inputnumber';
 import { Button } from 'primereact/button';
 import { ProgressBar } from 'primereact/progressbar';
-import { io } from 'socket.io-client';
+// The direct import of 'io' is no longer needed as we use the centralized socket instance.
+// import { io } from 'socket.io-client';
 import { Toast } from 'primereact/toast';
 import MyMenu from '../Components/MyMenu';
 import { Divider } from 'primereact/divider';
@@ -15,6 +16,8 @@ import { DataTable } from 'primereact/datatable'
 import { Column } from 'primereact/column';
 import { Dialog } from 'primereact/dialog';
 import FileExplorer from '../Components/FileExplorer';
+// Import the centralized socket instance.
+import { socket } from '../socket';
 
 
 // Main component for the data generation UI.
@@ -56,7 +59,8 @@ function Generator() {
     const [result, setResult] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [socket, setSocket] = useState(null);
+    // The local socket state is no longer needed; we use the imported 'socket' instance directly.
+    // const [socket, setSocket] = useState(null);
     const [progress, setProgress] = useState(0);
     const toast = useRef(null);
     const [canDownload, setCanDownload] = useState(false);
@@ -151,28 +155,27 @@ function Generator() {
 
     // Effect hook to manage the WebSocket connection.
     useEffect(() => {
-        // Establishes a connection to the backend server.
-        const newSocket = io('http://127.0.0.1:5000');
-        setSocket(newSocket);
-
+        // Connect the imported socket instance when the component mounts.
+        socket.connect();
+        
         // Listens for progress updates from the server.
-        newSocket.on('progress', (data) => setProgress(data.progress));
+        socket.on('progress', (data) => setProgress(data.progress));
         
         // Listens for resource usage updates.
-        newSocket.on('resource_usage', (data) => {
+        socket.on('resource_usage', (data) => {
             setCpuUsage(data.cpu);
             setRamUsage(data.ram);
         });
 
         // Handles generation errors from the server.
-        newSocket.on('generate_data_error', (data) => {
+        socket.on('generate_data_error', (data) => {
             setError(data.error); setLoading(false); setProgress(0); setCpuUsage(0); setRamUsage(0);
             setIsProgressDialogVisible(false); // Hide dialog on error.
             if (toast.current) toast.current.show({ severity: 'error', summary: 'Error', detail: data.error, life: 5000 });
         });
 
         // Handles the completion of the generation process.
-        newSocket.on('generate_data_complete', (data) => {
+        socket.on('generate_data_complete', (data) => {
             setFilename(data.dataset_id); setInputCsvFileName(data.input_csv_file);
             setLoading(false); setProgress(100); setCanDownload(true);
             setIsProgressDialogVisible(false); // Hide dialog on completion.
@@ -184,7 +187,7 @@ function Generator() {
         });
 
         // Cleanup function to disconnect the socket when the component unmounts.
-        return () => { newSocket.disconnect(); };
+        return () => { socket.disconnect(); };
     }, []);
 
     // Handles the selection of a CSV file for upload.
@@ -311,7 +314,6 @@ function Generator() {
 
     // Sends the manually entered datasets to the server for generation.
     const generateData = () => {
-        if (!socket) return;
         if (datasets.length === 0) {
             toast.current.show({ severity: 'warn', summary: 'Warning', detail: 'Add at least one dataset to the table.', life: 5000 });
             return;
@@ -319,16 +321,18 @@ function Generator() {
         startGeneration();
         // Remove the temporary 'id' field before sending to the server.
         const dataToSendToServer = datasets.map(({ id, ...rest }) => rest);
+        // Use the imported socket instance to emit the event.
         socket.emit('generate_data', { datasets: dataToSendToServer, folder: selectedFolder });
     };
 
     // Sends the uploaded CSV file to the server for generation.
     const generateDataCsv = () => {
-        if (!socket || !csvFile) {
+        if (!csvFile) {
             toast.current.show({ severity: 'warn', summary: 'Warning', detail: 'Please upload a CSV file.', life: 3000 });
             return;
         }
         startGeneration();
+        // Use the imported socket instance to emit the event.
         socket.emit('generate_data_from_csv', { csvFile: csvFile, folder: selectedFolder });
     };
 
