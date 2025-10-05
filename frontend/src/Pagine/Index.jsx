@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 // Import the centralized socket instance and the base URL for API calls.
 import { socket, API_BASE_URL } from '../socket';
 import MyMenu from "../Components/MyMenu";
@@ -23,62 +23,76 @@ function Index() {
     const [folderContent, setFolderContent] = useState([]);
     const [displayFileConfigDialog, setDisplayFileConfigDialog] = useState(false);
     const toast = useRef(null);
-    const [indexingProgress, setIndexingProgress] = useState(0);
     const [isIndexing, setIsIndexing] = useState(false);
-    const [indexingMessage, setIndexingMessage] = useState("");
     const [showProgressDialog, setShowProgressDialog] = useState(false);
     const [cpuUsage, setCpuUsage] = useState(0);
     const [ramUsage, setRamUsage] = useState(0);
+
+    // Consolidated state for progress information.
+    const [progressInfo, setProgressInfo] = useState({
+        progress: 0,
+        message: "",
+        processed_count: 0,
+        total_count: 0
+    });
 
     // --- COMPONENT CONFIGURATION ---
     const partitionTypes = [
         { label: 'Partitions', value: 'partitions' },
         { label: 'Geometries', value: 'geometries' },
-        { label: 'Bits', value: 'bits' }
+        { label: 'Bytes', value: 'bits' }
     ];
+
+    // --- SOCKET EVENT HANDLERS ---
+    // We define these handlers outside of useEffect and wrap them in useCallback
+    // to prevent stale state closures and ensure they have a stable identity.
+    const onProgress = useCallback((data) => {
+        console.log("MESSAGE RECEIVED:", data.message); 
+
+        setProgressInfo({
+            progress: data.progress,
+            message: data.message || "Processing...",
+            processed_count: data.processed_count,
+            total_count: data.total_count
+        });
+        // This is the key fix: We no longer check the previous state.
+        // If we receive a progress event, we ensure the dialog is visible.
+        // This avoids issues with stale state inside the event handler.
+        setShowProgressDialog(true);
+    }, []); // Empty dependency array is fine as state setters are stable.
+
+    const onComplete = useCallback((data) => {
+        toast.current.show({ severity: 'success', summary: 'Success', detail: data.message, life: 5000 });
+        setIsIndexing(false);
+        setProgressInfo(prev => ({ ...prev, progress: 100, message: "Indexing completed!" }));
+        setTimeout(() => {
+            setShowProgressDialog(false);
+            setProgressInfo({ progress: 0, message: "", processed_count: 0, total_count: 0 });
+            setCpuUsage(0);
+            setRamUsage(0);
+        }, 2000);
+    }, []);
+
+    const onError = useCallback((data) => {
+        toast.current.show({ severity: 'error', summary: 'Error', detail: data.error, life: 5000 });
+        setIsIndexing(false);
+        setShowProgressDialog(false);
+        setProgressInfo({ progress: 0, message: "", processed_count: 0, total_count: 0 });
+        setCpuUsage(0);
+        setRamUsage(0);
+    }, []);
+
+    const onResourceUsage = useCallback((data) => {
+        setCpuUsage(data.cpu);
+        setRamUsage(data.ram);
+    }, []);
 
     // --- EFFECTS ---
     useEffect(() => {
         // Connect to the socket server when the component mounts.
-        socket.connect();
-
-        // --- SOCKET EVENT HANDLERS ---
-        const onProgress = (data) => {
-            setIndexingProgress(data.progress);
-            setIndexingMessage(`Processing: ${data.processed_count}/${data.total_count} (${data.file_name})...`);
-            if (!showProgressDialog) {
-                setShowProgressDialog(true);
-            }
-        };
-
-        const onComplete = (data) => {
-            toast.current.show({ severity: 'success', summary: 'Success', detail: data.message, life: 5000 });
-            setIsIndexing(false);
-            setIndexingProgress(100);
-            setIndexingMessage("Indexing completed!");
-            setTimeout(() => {
-                setShowProgressDialog(false);
-                setIndexingProgress(0);
-                setIndexingMessage("");
-                setCpuUsage(0);
-                setRamUsage(0);
-            }, 2000);
-        };
-
-        const onError = (data) => {
-            toast.current.show({ severity: 'error', summary: 'Error', detail: data.error, life: 5000 });
-            setIsIndexing(false);
-            setShowProgressDialog(false);
-            setIndexingProgress(0);
-            setIndexingMessage("");
-            setCpuUsage(0);
-            setRamUsage(0);
-        };
-
-        const onResourceUsage = (data) => {
-            setCpuUsage(data.cpu);
-            setRamUsage(data.ram);
-        };
+        if (!socket.connected) {
+            socket.connect();
+        }
 
         // --- REGISTER LISTENERS ---
         socket.on('spatial_indexing_progress', onProgress);
@@ -95,9 +109,13 @@ function Index() {
             socket.off('resource_usage', onResourceUsage);
 
             // Disconnect from the socket when the component unmounts.
-            socket.disconnect();
+            if (socket.connected) {
+                socket.disconnect();
+            }
         };
-    }, []); // The empty dependency array [] ensures this effect runs only once on mount.
+        // Add the handlers to the dependency array to follow React's rules.
+        // useCallback ensures they don't trigger the effect unnecessarily.
+    }, [onProgress, onComplete, onError, onResourceUsage]);
 
     // --- EVENT HANDLERS ---
     const handleFolderSelect = (folderName, parentDir) => {
@@ -154,8 +172,12 @@ function Index() {
         }
         
         setIsIndexing(true);
-        setIndexingProgress(0);
-        setIndexingMessage(`Initializing indexing for: "${selectedDatasetFolder}"...`);
+        setProgressInfo({ 
+            progress: 0, 
+            message: `Initializing indexing for: "${selectedDatasetFolder}"...`, 
+            processed_count: 0, 
+            total_count: folderContent.length 
+        });
         setCpuUsage(0);
         setRamUsage(0);
         setShowProgressDialog(true);
@@ -204,14 +226,10 @@ function Index() {
             <Button label="Start Indexing" icon="pi pi-play" onClick={processSpatialIndexing} autoFocus />
         </div>
     );
+    // This helper now uses the reliable state values instead of parsing strings.
     const progressDisplay = () => {
-        const match = indexingMessage.match(/(\d+)\/(\d+)/);
-        if (match) return `${match[1]}/${match[2]}`;
-        if (folderContent.length > 0) {
-            const current = Math.round((indexingProgress / 100) * folderContent.length);
-            return `${current}/${folderContent.length}`;
-        }
-        return '0/0';
+        const total = progressInfo.total_count || folderContent.length;
+        return `${progressInfo.processed_count || 0}/${total}`;
     };
 
     // --- RENDER ---
@@ -251,9 +269,9 @@ function Index() {
                     </Panel>
                 </div>
                 <Dialog header="Indexing Progress" visible={showProgressDialog} style={{ width: '50vw' }} onHide={() => !isIndexing && setShowProgressDialog(false)} closable={!isIndexing} footer={renderProgressDialogFooter}>
-                    <p className='font-bold'>{indexingMessage}</p>
+                    <p className='font-bold'>{progressInfo.message}</p>
                     <div className="flex flex-column gap-3 pt-2">
-                        <div><ProgressBar value={indexingProgress} displayValueTemplate={progressDisplay}></ProgressBar></div>
+                        <div><ProgressBar value={progressInfo.progress} displayValueTemplate={progressDisplay}></ProgressBar></div>
                         <Divider />
                         <div>
                             <label>CPU Usage</label>

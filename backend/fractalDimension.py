@@ -419,7 +419,7 @@ def main():
 		
 		# ---------------------------------------------------------------------------------------------------------------------------------------------------
 		# Se in 'parameter' troviamo uno tra i valori 'avg_area' o 'avg_side_length_0' o 'avg_side_length_1' --> dimensione frattale su quel parametro (no training set)
-		elif p in ('avg_area', 'avg_side_length_0', 'avg_side_length_1'):
+		elif p in ('avg_area', 'avg_side_length_0', 'avg_side_length_1', 'E2'):
 			print(f"<System> The user requested to calculate the fractal dimension on the parameter '{p}' with reference to '{nameSummary}'")
 		
 			# Verifica che siano stati inseriti tutti i parametri necessari al calcolo richiesto
@@ -444,22 +444,20 @@ def main():
 
 			fdResult = fd(0, rowCount, 0, maxValue, path_nameSummary, p, ";")
 
-			print()
-			print(fdResult)
-			print()
-
 			# Processo di salvataggio dei risultati nel folder indicato
-			header = ["avg_area", "avg_side_length_0", "avg_side_length_1"]		# Header del file
+			header = ["avg_area", "avg_side_length_0", "avg_side_length_1", "E2"]		# Header del file
 
 			if not os.path.isfile(path_nameFD):									# Verifica esistenza del file, NON ESISTE
 				# Composizione della riga da inserire
-				row = ["", "", ""]
+				row = ["", "", "", ""]
 				if p == 'avg_area':												# Parametro analizzato: 'avg_area'
 					row[0] = fdResult
 				elif p == 'avg_side_length_0':									# Parametro analizzato: 'avg_side_length_0'
 					row[1] = fdResult
-				else:															# Parametro analizzato: 'avg_side_length_1'
+				elif p == 'avg_side_length_1':									# Parametro analizzato: 'avg_side_length_1'
 					row[2] = fdResult
+				else:															# Parametro analizzato: 'E2'
+					row[3] = fdResult
 
 				with open(path_nameFD, "w", encoding="utf-8", newline="") as f:	# Creazione del file
 					writer = csv.writer(f, delimiter=";")

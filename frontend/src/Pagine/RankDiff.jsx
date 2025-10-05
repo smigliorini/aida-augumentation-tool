@@ -8,8 +8,6 @@ import { Dialog } from 'primereact/dialog';
 import { ScrollPanel } from 'primereact/scrollpanel';
 import { Message } from 'primereact/message';
 import { Divider } from 'primereact/divider';
-// The direct import of 'io' is no longer needed.
-// import { io } from 'socket.io-client';
 import { ProgressBar } from 'primereact/progressbar';
 import MyMenu from '../Components/MyMenu';
 import FileExplorer from '../Components/FileExplorer';
@@ -32,9 +30,6 @@ function RankDiff() {
     const [dialogVisible, setDialogVisible] = useState(false);
     const [dialogMessage, setDialogMessage] = useState('');
 
-    // State for WebSocket communication and resource monitoring.
-    // The socket ref is no longer needed; the imported instance is used directly.
-    // const socket = useRef(null);
     const [cpuUsage, setCpuUsage] = useState(0);
     const [ramUsage, setRamUsage] = useState(0);
 

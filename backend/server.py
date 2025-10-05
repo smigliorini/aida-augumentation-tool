@@ -36,8 +36,8 @@ app = Flask(__name__)
 CORS(app)  # Enable Cross-Origin Resource Sharing for the app.
 socketio = SocketIO(app, cors_allowed_origins="*", 
                     async_mode='eventlet', 
-                    ping_timeout=120, 
-                    ping_interval=60)  # Initialize Socket.IO with CORS for real-time communication.
+                    ping_timeout=3600, 
+                    ping_interval=25)  # Initialize Socket.IO with CORS for real-time communication.
 logging.basicConfig(level=logging.DEBUG)  # Configure basic logging for debugging purposes.
 
 # Base fixed path for all the data-folders inside the container
@@ -179,93 +179,106 @@ def run_rank_diff_socket(data):
     """
     logging.debug('Received run_rank_diff event via Socket.IO')
     
-    # This will be used to stop the monitoring thread once the process is complete.
     stop_monitoring_event = threading.Event()
 
     try:
-        # Extract and Validate Input
+        # --- 1. Parameter Extraction and Validation ---
         param_to_categorize = data.get('paramToCategorize')
         number_intervals = data.get('numberIntervals')
-        rq_results_folder_name = data.get('rqSessionFolder', '') # Optional subfolder.
+        rq_results_folder_name = data.get('rqSessionFolder', '') 
         rq_result_file_name = data.get('rqResultFile')
 
         if not all([param_to_categorize, number_intervals, rq_result_file_name]):
             emit('rank_diff_error', {'error': 'Missing required parameters.'})
             return
-
         if not isinstance(number_intervals, int) or number_intervals <= 0:
             emit('rank_diff_error', {'error': 'numberIntervals must be a positive integer.'})
             return
 
-        # Set Up File Paths
-        rank_script_cwd = PARENT_DIRS['parent_dir_rank']
+        # --- 2. Path Construction and File Verification ---
         path_range_queries_result = os.path.join(PARENT_DIRS['range_query_results'], rq_results_folder_name)
         specific_rq_result_full_path = os.path.join(path_range_queries_result, rq_result_file_name)
 
         if not os.path.exists(specific_rq_result_full_path):
             emit('rank_diff_error', {'error': f"Specified RQ result file not found at: {specific_rq_result_full_path}"})
             return
-
-        # Dynamically discover related files
-        # Infer session ID and paths for summary and feature description files.
-        base_name = rq_result_file_name.rsplit('.', 1)[0]
-        session_id = base_name.replace('rqR_', '')
+        
+        # Use regex to robustly extract the unique session ID
+        # The session ID is defined as YYYYMMDD_HHMMSS_UUID. This avoids dependency on prefixes like 'rqR_'.
+        session_id_match = re.search(r'(\d{8}_\d{6}_[0-9a-fA-F]{8})', rq_result_file_name)
+        if not session_id_match:
+            error_msg = f"Could not extract a valid session ID (e.g., YYYYMMDD_HHMMSS_UUID) from filename: {rq_result_file_name}"
+            emit('rank_diff_error', {'error': error_msg})
+            return
+        session_id = session_id_match.group(1)
+        logging.debug(f"Extracted session ID: {session_id}")
+        
+        # Construct the summary filename using the extracted session ID.
         path_summaries_dir = PARENT_DIRS['parent_dir_input_ds']
-        name_summary_file = f"input_params_{session_id}.csv"
-        path_fd_dir = PARENT_DIRS['parent_dir_dataset']
-        name_fd_file = 'fd2_geom_allds.csv' # This seems to be a fixed name.
-
-        # Create rankParameters.csv for the script
-        # This file acts as a configuration for the rank_with_diff.py script.
+        name_summary_file = f"input_params_dataset_{session_id}.csv"
+        
+        # --- Dynamically Find Fractal Dimension Files using the extracted ID ---
+        path_fd_dir = PARENT_DIRS['fractalDimension']
+        found_fd_files = []
+        if os.path.isdir(path_fd_dir):
+            for filename in os.listdir(path_fd_dir):
+                if session_id in filename:
+                    found_fd_files.append(filename)
+                    logging.debug(f"Found matching Fractal Dimension file: {filename}")
+        
+        # --- 3. Dynamic Configuration File Generation ---
         rank_params_csv_path = os.path.join(DATA_BASE_PATH, "rankParameters.csv")
         header = ['parameterCategorized', 'numberIntervals', 'pathRangeQueriesResult', 'nameRangeQueriesResult', 'pathSummaries', 'nameSummary', 'pathFD', 'nameFD']
         
+        row_values = [
+            param_to_categorize, number_intervals,
+            path_range_queries_result, rq_result_file_name,
+            path_summaries_dir, name_summary_file,
+            path_fd_dir,
+        ] + found_fd_files
+
         with open(rank_params_csv_path, 'w', newline='', encoding='utf-8') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=header, delimiter=';')
-            writer.writeheader()
-            writer.writerow({
-                'parameterCategorized': param_to_categorize,
-                'numberIntervals': number_intervals,
-                'pathRangeQueriesResult': path_range_queries_result,
-                'nameRangeQueriesResult': rq_result_file_name,
-                'pathSummaries': path_summaries_dir,
-                'nameSummary': name_summary_file,
-                'pathFD': path_fd_dir,
-                'nameFD': name_fd_file
-            })
+            writer = csv.writer(csvfile, delimiter=';')
+            writer.writerow(header) 
+            writer.writerow(row_values)
         logging.debug(f"Created rankParameters.csv at: {rank_params_csv_path}")
 
-        # Execute the rank_with_diff.py script
+        # --- 4. Subprocess Execution ---
         current_script_dir = os.path.dirname(os.path.abspath(__file__))
         rank_diff_script_path = os.path.join(current_script_dir, "rank_with_diff.py")
         cmd = ["python", rank_diff_script_path]
         logging.debug(f"Executing command: {' '.join(cmd)} in CWD: {DATA_BASE_PATH}")
 
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=DATA_BASE_PATH)
+        socketio.start_background_task(monitor_and_emit_usage, stop_monitoring_event)
+
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=DATA_BASE_PATH, encoding='utf-8', bufsize=1)
         
-        # Start the new process-specific monitoring.
-        socketio.start_background_task(monitor_process_and_emit_usage, process, stop_monitoring_event)
+        # --- 5. Real-time Output Streaming and Processing ---
+        stdout_lines = []
+        for line in iter(process.stdout.readline, ''):
+            logging.info(f"rank_with_diff.py output: {line.strip()}")
+            stdout_lines.append(line)
+            socketio.sleep(0)
 
-        stdout, stderr = process.communicate()
+        process.wait()
+        stdout = "".join(stdout_lines)
 
-        # Handle Script Results
+        # --- 6. Result Handling and Client Communication ---
         if process.returncode != 0:
-            logging.error(f"Error executing rank_with_diff.py. STDOUT: {stdout}, STDERR: {stderr}")
-            error_details = f"Error running rank_with_diff.py.\n\n--- STDERR ---\n{stderr}"
+            logging.error(f"Error executing rank_with_diff.py. STDOUT: {stdout}")
+            error_details = f"Error running rank_with_diff.py."
             emit('rank_diff_error', {'error': error_details, 'output': stdout})
         else:
             logging.info(f"rank_with_diff.py executed successfully. Output: {stdout}")
-            # Infer the output folder name for the user message.
-            output_folder_leaf = rq_result_file_name.rsplit('.', 1)[0].replace('rqR_', '')
+            output_folder_leaf = re.sub(r'^(rqR_)?(.*?)(_ts\d*)?$', r'\2', rq_result_file_name.rsplit('.', 1)[0])
             output_info = f"Output files have been generated under the 'trainingSets/{output_folder_leaf}' directory."
-            
             emit('rank_diff_complete', {'message': 'Rank and difference sets generated successfully.', 'details': output_info, 'output': stdout})
 
     except Exception as e:
         logging.exception("Exception during rank_with_diff.py execution.")
         emit('rank_diff_error', {'error': f'Internal server error: {str(e)}'})
     finally:
-        # Ensure that resource monitoring is always stopped.
+        # --- 7. Cleanup ---
         stop_monitoring_event.set()
 
 # ==============================================================================
@@ -299,6 +312,8 @@ def _run_queries_thread(data):
     Args:
         data (dict): The original data dictionary from the 'generate_queries' event.
     """
+    stop_monitoring_event = threading.Event()
+
     try:
         # Extract Data and Set Up Paths
         queries_from_frontend = data.get('queries', [])
@@ -413,6 +428,9 @@ def _run_queries_thread(data):
         logging.exception(f'Exception in _run_queries_thread: {e}')
         socketio.emit('generate_query_error', {'error': str(e)})
 
+    finally:
+        stop_monitoring_event.set()
+
 @socketio.on('generate_queries')
 def generate_queries_backend(data):
     """
@@ -442,6 +460,8 @@ def _run_queries_from_csv_thread(data):
     Args:
         data (dict): The original data dictionary from the 'generate_queries_from_csv' event.
     """
+    stop_monitoring_event = threading.Event()
+
     try:
         # Decode CSV and Set Up Paths
         csv_file_b64 = data.get('csvFile')
@@ -563,6 +583,9 @@ def _run_queries_from_csv_thread(data):
         logging.exception(f'Exception in _run_queries_from_csv_thread: {e}')
         socketio.emit('generate_query_error', {'error': str(e)})
 
+    finally:
+        stop_monitoring_event.set()
+
 @socketio.on('generate_queries_from_csv')
 def generate_queries_from_csv_backend(data):
     """
@@ -585,9 +608,12 @@ def generate_queries_from_csv_backend(data):
 # ==============================================================================
 # --- API ENDPOINTS FOR SCALA PROGRAMS (Index)---
 # ==============================================================================
+
 def run_scala_indexing_and_emit(data, stop_monitoring_event):
     """
     Runs the Scala indexing process in a background thread and emits progress via Socket.IO.
+    This version includes enhanced log parsing to provide detailed feedback during the
+    SBT and application startup phases.
 
     Args:
         data (dict): Dictionary containing 'folder_name' and 'files_config'.
@@ -600,13 +626,11 @@ def run_scala_indexing_and_emit(data, stop_monitoring_event):
 
     try:
         # Prepare Paths 
-        # Construct the full paths for the input dataset folder and the output index folder.
         full_input_dataset_folder_path = os.path.join(PARENT_DIRS['parent_dir_dataset'], folder_name)
         specific_index_output_path = os.path.join(PARENT_DIRS['indexes'], folder_name)
         os.makedirs(specific_index_output_path, exist_ok=True)
         
         # Create Configuration CSV 
-        # The Scala 'IndexApp' reads its parameters from this specific CSV file.
         index_params_csv_path_for_scala = os.path.join(sbt_project_root, "indexParameters.csv")
         csv_columns_for_scala = ["pathDatasets", "nameDataset", "pathIndexes", "typePartition", "num"]
         
@@ -615,10 +639,8 @@ def run_scala_indexing_and_emit(data, stop_monitoring_event):
             writer.writeheader()
             for file_cfg in files_config:
                 writer.writerow({
-                    "pathDatasets": full_input_dataset_folder_path,
-                    "nameDataset": file_cfg.get('fileName'),
-                    "pathIndexes": specific_index_output_path,
-                    "typePartition": file_cfg.get('partitionType'),
+                    "pathDatasets": full_input_dataset_folder_path, "nameDataset": file_cfg.get('fileName'),
+                    "pathIndexes": specific_index_output_path, "typePartition": file_cfg.get('partitionType'),
                     "num": file_cfg.get('dimension')
                 })
         logging.debug(f"indexParameters.csv created at: {index_params_csv_path_for_scala}")
@@ -626,39 +648,53 @@ def run_scala_indexing_and_emit(data, stop_monitoring_event):
         # Execute Scala Subprocess 
         cmd = [sbt_executable_name, "runMain IndexApp"]
         process = subprocess.Popen(
-            cmd, cwd=sbt_project_root,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, # Redirect stderr to stdout to capture all output.
-            text=True, encoding='utf-8', bufsize=1
+            cmd, cwd=sbt_project_root, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True, encoding='utf-8', bufsize=1
         )
 
-        # Start the process-specific resource monitoring in a background task.
         socketio.start_background_task(monitor_process_and_emit_usage, process, stop_monitoring_event)
         
         # Stream Output and Handle Completion 
-        # Read the subprocess's stdout line by line to parse progress updates.
         processed_count = 0
         total_files = len(files_config)
-        
+        # Use a state variable to track the initialization phase and prevent duplicate messages.
+        init_phase = 0 # 0=start, 1=sbt, 2=project, 3=running
+
         for line in process.stdout:
             line_stripped = line.strip()
             if not line_stripped: continue
             
             logging.info(f"Scala stdout: {line_stripped}")
             
-            # Look for a specific string in the output that indicates a file has been processed.
-            if "<System> Partitioning '" in line_stripped and "'!" in line_stripped:
+            # --- Enhanced Status Parsing Logic ---
+            # Phase 1: SBT and Scala Dependency Download
+            if init_phase < 1 and ("getting org.scala-sbt" in line_stripped or "getting Scala" in line_stripped):
+                socketio.emit('spatial_indexing_progress', {'progress': 5, 'message': 'Initializing SBT (this may take a moment)...', 'processed_count': 0, 'total_count': total_files})
+                init_phase = 1
+            # Phase 2: Loading Scala Project
+            elif init_phase < 2 and "loading project" in line_stripped:
+                socketio.emit('spatial_indexing_progress', {'progress': 10, 'message': 'Loading Scala project settings...', 'processed_count': 0, 'total_count': total_files})
+                init_phase = 2
+            # Phase 3: Starting the main application
+            elif init_phase < 3 and "running (fork) IndexApp" in line_stripped:
+                socketio.emit('spatial_indexing_progress', {'progress': 15, 'message': 'Starting Indexing Application...', 'processed_count': 0, 'total_count': total_files})
+                init_phase = 3
+            
+            # --- Main Progress Parsing Logic ---
+            # This logic triggers only after the initialization phases are complete.
+            if init_phase >= 3 and "<System> Partitioning '" in line_stripped and "'!" in line_stripped:
                 processed_count += 1
                 try:
                     file_name = line_stripped.split("'")[1]
-                    progress = int((processed_count / total_files) * 100)
+                    # Ensure progress doesn't go backwards from the initial setup values.
+                    progress = max(15, int((processed_count / total_files) * 100))
                     socketio.emit('spatial_indexing_progress', {
                         'progress': progress, 'file_name': file_name,
+                        'message': f"Indexing file {processed_count}/{total_files}: {file_name}",
                         'processed_count': processed_count, 'total_count': total_files
                     })
-                    # Yield control to allow Socket.IO to send the event immediately.
                     socketio.sleep(0)
-                except IndexError:
+                except (IndexError, ValueError):
                     pass
         
         process.wait()
@@ -717,7 +753,6 @@ def process_histograms_socket(data):
         emit('histogram_error', {'error': 'No folder name provided.'})
         return
 
-    # Start resource monitoring.
     stop_monitoring_event = threading.Event()
     socketio.start_background_task(monitor_and_emit_usage, stop_monitoring_event)
 
@@ -727,8 +762,7 @@ def process_histograms_socket(data):
         if not os.path.isdir(full_input_folder_path):
             emit('histogram_error', {'error': f"Input folder: '{folder_name}' not found."})
             return
-
-        # Create a unique output sub-directory for this run.
+        
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         safe_folder_name = folder_name.replace(os.sep, '_').replace(' ', '_')
         output_sub_dir = f"{safe_folder_name}_histograms_{timestamp}"
@@ -736,20 +770,13 @@ def process_histograms_socket(data):
         os.makedirs(full_output_dir_path, exist_ok=True)
         logging.debug(f"Created output directory for histograms: {full_output_dir_path}")
 
-        # Find valid CSV files to process, excluding specific summary files.
         all_items_in_folder = os.listdir(full_input_folder_path)
-        csv_files_in_root = [
-            f for f in all_items_in_folder
-            if os.path.isfile(os.path.join(full_input_folder_path, f))
-            and f.endswith('.csv') and not f.startswith('.')
-            and f not in ['dataset-summaries_ts.csv', 'rq_result_ts.csv', 'fd2_geom_allds_ts.csv', 'new_datasets.csv']
-        ]
+        csv_files_in_root = [f for f in all_items_in_folder if os.path.isfile(os.path.join(full_input_folder_path, f)) and f.endswith('.csv') and not f.startswith('.') and f not in ['dataset-summaries_ts.csv', 'rq_result_ts.csv', 'fd2_geom_allds_ts.csv', 'new_datasets.csv']]
 
         if not csv_files_in_root:
             emit('histogram_complete', {'message': f"No valid CSV files found in '{folder_name}' to process."})
             return
 
-        # Process Each File 
         num_rows, num_columns = 128, 128
         total_files = len(csv_files_in_root)
         processed_count = 0
@@ -758,31 +785,30 @@ def process_histograms_socket(data):
         for i, csv_file_name in enumerate(csv_files_in_root):
             input_file_path = os.path.join(full_input_folder_path, csv_file_name)
             
-            # Emit progress update.
             progress = int(((i + 1) / total_files) * 100)
-            emit('histogram_progress', {
-                'progress': progress,
-                'file_name': csv_file_name,
-                'processed_count': i + 1,
-                'total_count': total_files
-            })
+            emit('histogram_progress', {'progress': progress, 'file_name': csv_file_name, 'processed_count': i + 1, 'total_count': total_files})
             
-            # Check if the dataset format is compatible (bounding box).
             if not is_bounding_box_dataset(input_file_path):
                 logging.info(f"Skipping non-bounding-box dataset: {input_file_path}")
                 skipped_files.append(csv_file_name)
+                # Yield control even if skipping, to keep UI responsive.
+                socketio.sleep(0)
                 continue
 
-            # Define output path and run the extraction function.
             output_file_name = csv_file_name.replace('.csv', '_summary.csv')
             output_file_path = os.path.join(full_output_dir_path, output_file_name)
+
+            # Yield control to the server BEFORE the potentially blocking call.
+            # This allows the resource monitor to update and keeps the UI responsive.
+            socketio.sleep(0)
 
             logging.info(f"Processing: {input_file_path} -> {output_file_path}")
             extract_histogram(input_file_path, output_file_path, num_rows, num_columns)
             processed_count += 1
-            socketio.sleep(0.1) # Brief pause to allow the frontend to update.
+            
+            # Yield control again AFTER the call to process the next item.
+            socketio.sleep(0)
 
-        # Finalize and Notify Client 
         message = f"Completed histogram extraction for {processed_count} files in '{folder_name}'. Output in: {output_sub_dir}"
         if skipped_files:
             message += f" Skipped {len(skipped_files)} non-bounding-box files."
@@ -793,7 +819,6 @@ def process_histograms_socket(data):
         logging.exception(f"Error during histogram extraction for folder: '{folder_name}'.")
         emit('histogram_error', {'error': f'Internal server error: {str(e)}'})
     finally:
-        # Stop resource monitoring.
         stop_monitoring_event.set()
     
 def is_bounding_box_dataset(filepath):
@@ -1012,6 +1037,71 @@ def rename_folder(old_name):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/dataset/rename', methods=['POST'])
+def rename_dataset_globally():
+    """
+    Handles a "deep rename" for a dataset. It finds all files and folders
+    across multiple key directories that contain the old dataset ID and renames
+    them to use the new ID. It includes a check to prevent name collisions.
+    """
+    data = request.json
+    old_id = data.get('old_id')
+    new_id = data.get('new_id')
+
+    if not old_id or not new_id:
+        return jsonify({'error': 'Missing old_id or new_id in request.'}), 400
+
+    # Define the directories to scan for dataset-related files and folders.
+    relevant_dir_keys = [
+        'parent_dir_dataset', 'indexes', 'range_query_results', 'trainingSets',
+        'datasetsAugmentation', 'parent_dir_input_ds', 'parent_dir_rank',
+        'fractalDimension', 'parent_dir_histogram'
+    ]
+    dirs_to_scan = [PARENT_DIRS[key] for key in relevant_dir_keys if key in PARENT_DIRS]
+
+    # --- Step 1: Check for uniqueness of the new_id to prevent collisions ---
+    for dir_path in dirs_to_scan:
+        if not os.path.isdir(dir_path): continue
+        for item_name in os.listdir(dir_path):
+            if new_id in item_name:
+                logging.warning(f"Rename blocked: new_id '{new_id}' already exists in item '{item_name}' in {dir_path}")
+                return jsonify({'error': f"The name '{new_id}' is already in use by another dataset. Please choose a different name."}), 409 # 409 Conflict
+
+    # --- Step 2: Find all items with the old_id and prepare for rename ---
+    items_to_rename = []
+    for dir_path in dirs_to_scan:
+        if not os.path.isdir(dir_path): continue
+        for item_name in os.listdir(dir_path):
+            if old_id in item_name:
+                old_path = os.path.join(dir_path, item_name)
+                new_name = item_name.replace(old_id, new_id)
+                new_path = os.path.join(dir_path, new_name)
+                items_to_rename.append((old_path, new_path))
+    
+    if not items_to_rename:
+        return jsonify({'error': f"No files or folders found for dataset ID '{old_id}'."}), 404
+
+    # --- Step 3: Perform the rename operations ---
+    renamed_count = 0
+    errors = []
+    for old_path, new_path in items_to_rename:
+        try:
+            os.rename(old_path, new_path)
+            renamed_count += 1
+            logging.info(f"Renamed: {old_path} -> {new_path}")
+        except OSError as e:
+            logging.error(f"Failed to rename {old_path} to {new_path}: {e}")
+            errors.append(f"Could not rename {os.path.basename(old_path)}.")
+    
+    if errors:
+        return jsonify({
+            'error': 'One or more items could not be renamed.',
+            'details': errors,
+            'message': f"Successfully renamed {renamed_count} out of {len(items_to_rename)} items."
+        }), 500
+
+    return jsonify({'message': f"Successfully renamed {renamed_count} items for dataset '{new_id}'."}), 200
+
 @app.route('/zip/folder/<path:folder_name>', methods=['GET'])
 def zip_folder(folder_name):
     """
@@ -1041,6 +1131,7 @@ def zip_folder(folder_name):
     except Exception as e:
         logging.error(f"Error zipping folder: {e}")
         return jsonify({'error': str(e)}), 500
+
 # ==============================================================================
 # --- API ENDPOINTS FOR generator.py SCRIPT ---
 # ==============================================================================
@@ -1057,104 +1148,103 @@ def generate_data(data):
                      - datasets: A list of dictionaries, each with parameters for one dataset.
                      - folder (optional): A subfolder within 'parent_dir_dataset' to save the results.
     """
-    # This will be used to stop the monitoring thread once the process is complete.
+    # Create a threading event to signal the resource monitoring background task to stop.
     stop_monitoring_event = threading.Event()
     
     try:
+        # --- 1. Directory and File Path Setup ---
+        # Determine the base directory for saving generated datasets.
         base_path_for_generation = PARENT_DIRS['parent_dir_dataset']
         target_folder = data.get('folder')
-        
-        # Determine the parent directory for the new unique folder.
         parent_for_new_unique_dir = os.path.join(base_path_for_generation, target_folder) if target_folder else base_path_for_generation
         os.makedirs(parent_for_new_unique_dir, exist_ok=True)
-
-        # Create a new unique folder for this generation run.
+        
+        # Create a new, unique directory for this generation session to prevent file collisions.
         main_dataset_dir = create_unique_directory(parent_for_new_unique_dir)
         generated_folder_basename = os.path.basename(main_dataset_dir)
 
-        # Save Input Parameters to a Summary CSV 
+        # Prepare path for a summary CSV file that will store the input parameters for this session.
+        # This creates a reproducible record of the generation task.
         input_params_dir = PARENT_DIRS['parent_dir_input_ds']
         os.makedirs(input_params_dir, exist_ok=True)
         input_csv_filename = f"input_params_{generated_folder_basename}.csv"
         input_csv_path = os.path.join(input_params_dir, input_csv_filename)
 
+        # --- 2. Prepare Input Data and Write Summary CSV ---
         datasets_to_process = data.get('datasets', [])
         total_datasets = len(datasets_to_process)
         
-        # Assign filenames before writing the summary CSV.
+        # Sequentially name each dataset and add this name to its parameter dictionary.
         for i, dataset_params in enumerate(datasets_to_process):
             file_format = dataset_params.get('format', 'csv').lower()
             dataset_params['generated_filename'] = f"dataset{i + 1}.{file_format}"
-
+        
+        # If there are datasets to process, write their parameters to the summary CSV file.
         if datasets_to_process:
-            # Define the exact column order for the summary file.
-            csv_columns_order = [
-                'datasetName', 'distribution', 'geometry', 'x1', 'y1', 'x2', 'y2',
-                'num_features', 'max_seg', 'num_points', 'avg_area',
-                'avg_side_length_0', 'avg_side_length_1', 'E0', 'E2'
-            ]
+            csv_columns_order = ['datasetName', 'distribution', 'geometry', 'x1', 'y1', 'x2', 'y2','num_features', 'max_seg', 'num_points', 'avg_area','avg_side_length_0', 'avg_side_length_1', 'E0', 'E2']
             with open(input_csv_path, 'w', newline='') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=csv_columns_order, delimiter=';')
                 writer.writeheader()
                 for params in datasets_to_process:
-                    # Map frontend parameters to the CSV column names.
-                    row_data = {
-                        'datasetName': os.path.splitext(params.get('generated_filename', ''))[0],
-                        'distribution': params.get('distribution', ''),
-                        'geometry': params.get('geometry', ''),
-                        'x1': params.get('x1', ''), 'y1': params.get('y1', ''),
-                        'x2': params.get('x2', ''), 'y2': params.get('y2', ''),
-                        'num_features': params.get('cardinality', ''),
-                        'max_seg': params.get('maxseg', ''),
-                        'avg_area': params.get('polysize', '')
-                    }
-                    # Split 'maxsize' (e.g., "1.0,1.0") into two columns.
+                    # Map parameters from the frontend to the columns of the summary CSV.
+                    row_data = {'datasetName': os.path.splitext(params.get('generated_filename', ''))[0],'distribution': params.get('distribution', ''),'geometry': params.get('geometry', ''),'x1': params.get('x1', ''), 'y1': params.get('y1', ''),'x2': params.get('x2', ''), 'y2': params.get('y2', ''),'num_features': params.get('cardinality', ''),'max_seg': params.get('maxseg', ''),'avg_area': params.get('polysize', '')}
+                    # Handle composite values like 'maxsize', splitting it into two separate columns.
                     maxsize_values = params.get('maxsize')
                     if isinstance(maxsize_values, str):
                         parts = maxsize_values.split(',')
                         row_data['avg_side_length_0'] = parts[0] if len(parts) > 0 else ''
                         row_data['avg_side_length_1'] = parts[1] if len(parts) > 1 else ''
                     writer.writerow(row_data)
-            logging.debug(f'Input parameters saved to: {input_csv_path}')
 
-        # Execute generator.py for each dataset 
+        # --- 3. Execute Dataset Generation ---
+        # Start a background task to monitor system resources (CPU/memory) for the duration of the generation.
+        socketio.start_background_task(monitor_and_emit_usage, stop_monitoring_event)
+
+        # Iterate through each dataset configuration and run the generator script for it.
         for i, dataset in enumerate(datasets_to_process):
             output_path = os.path.join(main_dataset_dir, dataset['generated_filename'])
-
-            # Construct the command-line arguments for generator.py.
+            
+            # Dynamically build the command-line arguments for 'generator.py' from the dataset parameters.
             cmd = ["python", "generator.py"]
             for key, value in dataset.items():
+                # Append only valid parameters, skipping internal ones like 'id'. `shlex.quote` prevents command injection.
                 if value is not None and str(value).strip() != '' and key not in ['id', 'generated_filename']:
                     cmd.append(f"{key}={shlex.quote(str(value))}")
 
             logging.debug(f'Executing command: {cmd}')
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            # Execute the script as a subprocess, capturing stdout and stderr.
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
             
-            # Start monitoring if it's the first process.
-            if i == 0:
-                socketio.start_background_task(monitor_process_and_emit_usage, process, stop_monitoring_event)
+            # Stream the generator's output (stdout) directly to the destination file.
+            # This is memory-efficient as it avoids loading the entire dataset into memory.
+            with open(output_path, 'w', encoding='utf-8') as f:
+                for line in iter(process.stdout.readline, ''):
+                    f.write(line)
+                    socketio.sleep(0) # Yield control to other concurrent tasks (like monitoring).
 
-            stdout, stderr = process.communicate()
+            # Wait for the process to complete and capture any error output.
+            _, stderr = process.communicate()
 
+            # If the script fails, emit an error to the client and stop the entire process.
             if process.returncode != 0:
-                error_message = stderr.strip()
+                error_message = stderr.strip() if stderr else "Unknown error"
                 emit('generate_data_error', {'error': f'Error for dataset {i + 1}: {error_message}'})
                 return
-
-            # Write the script's output (the generated data) to the file.
-            with open(output_path, 'w') as f: f.write(stdout)
             
-            # Emit progress update.
+            # Update the client with the progress of the generation task.
             progress = int(((i + 1) / total_datasets) * 100)
             emit('progress', {'progress': progress})
 
+        # --- 4. Finalize ---
+        # Once all datasets are generated, notify the client of completion.
         emit('generate_data_complete', {'dataset_id': generated_folder_basename, 'input_csv_file': input_csv_filename})
 
     except Exception as e:
+        # Catch any unexpected server-side exceptions and report them to the client.
         logging.exception('Exception during manual data generation.')
         emit('generate_data_error', {'error': str(e)})
     finally:
-        # Stop resource monitoring.
+        # Ensure the resource monitoring background task is always stopped.
         stop_monitoring_event.set()
 
 @socketio.on('generate_data_from_csv')
@@ -1172,116 +1262,113 @@ def generate_data_from_csv(data):
     stop_monitoring_event = threading.Event()
     
     try:
-        #  Setup paths and decode the uploaded CSV 
+        # --- 1. Directory Setup and CSV Decoding ---
+        # This section is identical to generate_data: create a unique session directory.
         base_path_for_generation = PARENT_DIRS['parent_dir_dataset']
         target_folder = data.get('folder')
         parent_for_new_unique_dir = os.path.join(base_path_for_generation, target_folder) if target_folder else base_path_for_generation
         os.makedirs(parent_for_new_unique_dir, exist_ok=True)
-
         main_dataset_dir = create_unique_directory(parent_for_new_unique_dir)
         generated_folder_basename = os.path.basename(main_dataset_dir)
 
+        # Decode the base64-encoded CSV file sent from the frontend.
         input_csv_filename = f"input_params_{generated_folder_basename}.csv"
         input_csv_path = os.path.join(PARENT_DIRS['parent_dir_input_ds'], input_csv_filename)
-        
-        csv_file_content = data['csvFile'].split(',')[1]
+        csv_file_content = data['csvFile'].split(',')[1] # Remove the 'data:...' prefix
         csv_file_bytes = base64.b64decode(csv_file_content)
         csv_file_string = csv_file_bytes.decode('utf-8')
 
-        # Read the uploaded CSV and save it as the summary file 
-        # First, read the data to assign sequential names.
+        # --- 2. Parse Uploaded CSV and Prepare Data ---
+        # Use io.StringIO to treat the decoded CSV string as an in-memory file.
         uploaded_csv_data = []
         csv_input_for_read = io.StringIO(csv_file_string)
         reader = csv.DictReader(csv_input_for_read, delimiter=';')
         for i, row in enumerate(reader):
+            # Assign a sequential name to each dataset defined in the CSV.
             row['datasetName'] = f"dataset{i + 1}"
             uploaded_csv_data.append(row)
 
-        # Now, write the summary file with the correct headers and data.
-        csv_columns_order = [
-            'datasetName', 'distribution', 'geometry', 'x1', 'y1', 'x2', 'y2',
-            'num_features', 'max_seg', 'num_points', 'avg_area',
-            'avg_side_length_0', 'avg_side_length_1', 'E0', 'E2'
-        ]
+        # Write the parsed (and slightly modified) data to a new server-side summary CSV file.
+        csv_columns_order = ['datasetName', 'distribution', 'geometry', 'x1', 'y1', 'x2', 'y2','num_features', 'max_seg', 'num_points', 'avg_area','avg_side_length_0', 'avg_side_length_1', 'E0', 'E2']
         with open(input_csv_path, 'w', newline='') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=csv_columns_order, delimiter=';')
             writer.writeheader()
             for row_from_uploaded in uploaded_csv_data:
-                # Map uploaded columns to summary columns.
-                writer.writerow({
-                    'datasetName': row_from_uploaded.get('datasetName', ''),
-                    'distribution': row_from_uploaded.get('distribution', ''),
-                    'geometry': row_from_uploaded.get('geometry', ''),
-                    'x1': row_from_uploaded.get('x1', ''), 'y1': row_from_uploaded.get('y1', ''),
-                    'x2': row_from_uploaded.get('x2', ''), 'y2': row_from_uploaded.get('y2', ''),
-                    'num_features': row_from_uploaded.get('num_features', ''),
-                    'max_seg': row_from_uploaded.get('max_seg', ''),
-                    'avg_area': row_from_uploaded.get('avg_area', ''),
-                    'avg_side_length_0': row_from_uploaded.get('avg_side_length_0', ''),
-                    'avg_side_length_1': row_from_uploaded.get('avg_side_length_1', ''),
-                })
-        logging.debug(f'Input parameters from CSV saved to: {input_csv_path}')
-
-        # Construct and execute commands for generator.py 
+                # Map columns from the uploaded CSV to the standard server-side format.
+                writer.writerow({'datasetName': row_from_uploaded.get('datasetName', ''),'distribution': row_from_uploaded.get('distribution', ''),'geometry': row_from_uploaded.get('geometry', ''),'x1': row_from_uploaded.get('x1', ''), 'y1': row_from_uploaded.get('y1', ''),'x2': row_from_uploaded.get('x2', ''), 'y2': row_from_uploaded.get('y2', ''),'num_features': row_from_uploaded.get('num_features', ''),'max_seg': row_from_uploaded.get('max_seg', ''),'avg_area': row_from_uploaded.get('avg_area', ''),'avg_side_length_0': row_from_uploaded.get('avg_side_length_0', ''),'avg_side_length_1': row_from_uploaded.get('avg_side_length_1', ''),})
+        
+        # --- 3. Build Generator Commands from CSV Data ---
         commands = []
         output_filenames = []
         for i, row in enumerate(uploaded_csv_data):
-            output_filename = os.path.join(main_dataset_dir, f"dataset{i+1}.csv")
+            # Determine file extension based on geometry type.
+            geometry = row.get('geometry', '').lower()
+            file_extension = 'wkt' if geometry == 'polygon' else 'csv'
+            output_filename = os.path.join(main_dataset_dir, f"dataset{i+1}.{file_extension}")
             output_filenames.append(output_filename)
             
-            # Calculate affine matrix from bounding box coordinates.
+            # Calculate the affine transformation matrix from coordinates.
             try:
                 x1, y1, x2, y2 = float(row.get('x1',0)), float(row.get('y1',0)), float(row.get('x2',0)), float(row.get('y2',0))
                 affinematrix = f"{x2-x1},0,{x1},0,{y2-y1},{y1}"
             except (ValueError, TypeError):
                 emit('generate_data_error', {'error': 'Invalid x1, y1, x2, y2 values in CSV.'})
                 return
-
-            # Build the command.
+            
+            # Dynamically construct the command-line arguments for 'generator.py'.
             cmd = ["python", "generator.py", f"affinematrix={shlex.quote(affinematrix)}"]
-            # Map CSV columns to script arguments.
-            param_map = {
-                'distribution': 'distribution', 'num_features': 'cardinality',
-                'avg_area': 'polysize', 'geometry': 'geometry', 'max_seg': 'maxseg'
-
-            }
+            # Use a map to translate CSV column names to the script's expected argument names.
+            param_map = {'distribution': 'distribution', 'num_features': 'cardinality','avg_area': 'polysize', 'geometry': 'geometry', 'max_seg': 'maxseg'}
             for csv_col, script_arg in param_map.items():
                 if row.get(csv_col): cmd.append(f"{script_arg}={shlex.quote(row[csv_col])}")
             
-            # Add other necessary/default arguments.
+            # Add fixed or conditional arguments based on the data in the CSV row.
             cmd.append("dimensions=2")
-            cmd.append("format=csv")
+            cmd.append(f"format={file_extension}")
             if row.get('distribution') != "parcel" and row.get('geometry') == "box":
                 cmd.append(f"maxsize={shlex.quote(row.get('avg_side_length_0',''))},{shlex.quote(row.get('avg_side_length_1',''))}")
-
+            
+            # Add distribution-specific parameters.
+            distribution = row.get('distribution', '').lower()
+            if distribution == 'diagonal':
+                cmd.extend(["percentage=0.5", "buffer=0.5"])
+            elif distribution == 'bit':
+                cmd.extend(["probability=0.2", "digits=10"])
+            elif distribution == 'parcel':
+                cmd.extend(["srange=0.5", "dither=0.5"])
             commands.append(cmd)
 
-        # Execute the generated commands.
+        # --- 4. Execute Generation and Finalize ---
+        # This section is identical to generate_data: start monitor, run commands, and report progress.
+        socketio.start_background_task(monitor_and_emit_usage, stop_monitoring_event)
+
         for i, cmd in enumerate(commands):
             logging.debug(f'Executing command: {cmd}')
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
 
-            # Start monitoring if it's the first process.
-            if i == 0:
-                socketio.start_background_task(monitor_process_and_emit_usage, process, stop_monitoring_event)
-
-            stdout, stderr = process.communicate()
+            # Stream output directly to the corresponding file.
+            with open(output_filenames[i], 'w', encoding='utf-8') as f:
+                for line in iter(process.stdout.readline, ''):
+                    f.write(line)
+                    socketio.sleep(0)
+            
+            _, stderr = process.communicate()
 
             if process.returncode != 0:
-                emit('generate_data_error', {'error': f'Generator script failed: {stderr.strip()}'})
+                emit('generate_data_error', {'error': f'Generator script failed: {stderr.strip() if stderr else "Unknown error"}'})
                 return
 
-            with open(output_filenames[i], 'w') as f: f.write(stdout)
-            
             progress = int(((i + 1) / len(commands)) * 100)
             emit('progress', {'progress': progress})
 
         emit('generate_data_complete', {'dataset_id': generated_folder_basename, 'input_csv_file': input_csv_filename})
 
     except Exception as e:
+        # Catch any unexpected server-side exceptions.
         logging.exception('Exception during CSV data generation.')
         emit('generate_data_error', {'error': str(e)})
     finally:
+        # Ensure the resource monitoring is always stopped.
         stop_monitoring_event.set()
 
 # ==============================================================================
@@ -1370,8 +1457,8 @@ def preview_file_content(item_name):
 # Maps internal directory keys to user-friendly labels for the UI.
 ROOT_DIR_LABELS = {
     'parent_dir_dataset': '1. Generator', 'indexes': '2. Index',
-    'range_query_results': '3. Range Query', 'trainingSets': '4. Balancing Analysis',
-    'datasetsAugmentation': '5. Augmentation', 'augmentation_logs' : '5.5 Augmentation Logs',
+    'range_query_results': '3. Range Query', 'trainingSets': '4. Training Sets',
+    'datasetsAugmentation': '5. Augmented Datasets', 'augmentation_logs' : '5.5 Augmentation Logs',
     'parent_dir_histogram': '6. Histogram', 'fractalDimension': '#. Fractal Dimension','parent_dir_input_ds': 'a. Input Dataset Files',
     'parent_dir_rq_input': 'b. Input Range Query Files', 'parent_dir_rank': 'c. Input Balacing Analysis',
 }
@@ -1433,11 +1520,17 @@ def get_explorer_content():
     try:
         content = []
         for item_name in os.listdir(full_path):
+            # Skip .crc files if in Windows ambient
+            if item_name.endswith('.crc'):
+                continue
+            item_full_path = os.path.join(full_path, item_name) # Path for os checks
             item_relative_path = os.path.join(relative_path, item_name).replace('\\', '/')
-            if os.path.isdir(os.path.join(full_path, item_name)):
+            if os.path.isdir(item_full_path):
                 content.append({'key': item_relative_path, 'label': item_name, 'data': {'path': item_relative_path}, 'type': 'folder', 'leaf': False})
             else:
-                content.append({'key': item_relative_path, 'label': item_name, 'data': {'path': item_relative_path}, 'type': 'file', 'leaf': True})
+                # Get the size of the file in bytes.
+                file_size = os.path.getsize(item_full_path)
+                content.append({'key': item_relative_path, 'label': item_name, 'data': {'path': item_relative_path}, 'type': 'file', 'leaf': True, 'size': file_size})
         
         # Sort content alphabetically, with folders appearing before files.
         content.sort(key=lambda x: (x['type'] != 'folder', x['label'].lower()))
@@ -1551,8 +1644,6 @@ def run_augmentation_socket(data):
             emit('augmentation_error', {"error": "Missing required fields."})
             return
 
-        # current_script_dir = os.path.dirname(os.path.abspath(__file__))
-
         # Securely construct the absolute path to the training set directory
         training_set_dir_relative = data['trainingSetPath']
         path_parts = training_set_dir_relative.replace('\\', '/').split('/')
@@ -1590,13 +1681,15 @@ def run_augmentation_socket(data):
             path_datasets_full = os.path.abspath(os.path.join(PARENT_DIRS['parent_dir_dataset'], data['pathDatasets'].split('/')[1]))
             path_indexes_full = os.path.abspath(os.path.join(PARENT_DIRS['indexes'], data['pathIndexes'].split('/')[1]))
 
-            # Dynamically derive the names of the bin, summary, and RQ result files from the training set path.
-            ts_folder_name = os.path.basename(os.path.dirname(full_ts_path)) # e.g., "dataset_2025..."
+            # This logic correctly derives the session folder name (e.g., "dataset_2025...")
+            # from the full path of the specific training set folder (e.g., ".../training_set_1").
+            ts_folder_name = os.path.basename(os.path.dirname(full_ts_path))
+            
             bin_file_name = f'bin_{ts_folder_name}_ts.csv'
             summary_file_name = f'input_params_{ts_folder_name}_ts.csv'
             rq_result_file_name = f'rqR_{ts_folder_name}_ts.csv'
 
-            writer.writerow([full_ts_path, bin_file_name, summary_file_name, rq_result_file_name, 'input.csv',
+            writer.writerow([training_set_dir_relative, bin_file_name, summary_file_name, rq_result_file_name, 'input.csv',
                              path_datasets_full, path_indexes_full])
 
         # Execute the augmentation script as a subprocess
@@ -1675,29 +1768,24 @@ def run_fractal_dimension_socket(data):
         analysis_type = data.get('analysisType')
         selected_path_relative = data.get('selectedPath')
         parameters_list = data.get('parameters', [])
+        rq_source = data.get('rqSource')
 
         if not all([analysis_type, selected_path_relative, parameters_list]):
             emit('fractal_dimension_error', {'error': 'Missing required parameters from the client.'})
             return
 
-        # --- 2. Prepare fdParameters.csv ---
-        # The script fractalDimension.py expects a specific, somewhat unusual CSV structure.
-        # The header must have exactly 10 columns to pass an internal check.
-        # The data row, however, must have 9 columns for paths/config, followed by
-        # one column for each parameter to be analyzed. We use csv.writer to handle this.
+        total_datasets_for_progress = 0
 
+        # --- 2. Prepare fdParameters.csv ---
         params_file_path = os.path.join(DATA_BASE_PATH, 'fdParameters.csv')
         
-        # This header matches the 'expectedHeader' check in the script.
         header_for_script = [
             'pathDatasets', 'pathSummary', 'nameSummary', 'pathRangeQuery_ts', 'nameRangeQuery_ts',
             'fromX', 'toX', 'pathFD', 'pathFD_ts', 'parameters'
         ]
         
-        # Initialize a list for the data row with 9 empty placeholders.
         data_row = [''] * 9
 
-        # Resolve the full, absolute path for the selected file/folder to avoid ambiguity.
         path_parts = selected_path_relative.replace('\\', '/').split('/')
         root_key = path_parts[0]
 
@@ -1709,64 +1797,125 @@ def run_fractal_dimension_socket(data):
         sub_path_of_selection = os.path.join(*path_parts[1:]) if len(path_parts) > 1 else ''
         full_selected_path = os.path.abspath(os.path.join(base_path_of_selection, sub_path_of_selection))
 
-        # Security check: Ensure the resolved path is within the allowed base directory.
         if not full_selected_path.startswith(base_path_of_selection):
             emit('fractal_dimension_error', {'error': 'Directory traversal attempt detected.'})
             return
 
-        # Populate the data_row list based on the analysis type.
         if analysis_type == 'distribution':
             folder_name = os.path.basename(full_selected_path)
             summary_file_name = f"input_params_{folder_name}.csv"
+            summary_file_path = os.path.join(PARENT_DIRS['parent_dir_input_ds'], summary_file_name)
             
-            data_row[0] = full_selected_path                     # pathDatasets
-            data_row[1] = PARENT_DIRS['parent_dir_input_ds']     # pathSummary
-            data_row[2] = summary_file_name                      # nameSummary
-            data_row[5] = '1'                                    # fromX
+            if not os.path.exists(summary_file_path):
+                emit('fractal_dimension_error', {'error': f"Summary file '{summary_file_name}' not found."})
+                return
+            
+            try:
+                with open(summary_file_path, 'r', encoding='utf-8') as f:
+                    num_datasets = sum(1 for row in csv.reader(f)) - 1
+                    if num_datasets < 0: num_datasets = 0
+                total_datasets_for_progress = num_datasets
+            except Exception as e:
+                emit('fractal_dimension_error', {'error': f"Could not read or parse the summary file: {str(e)}"})
+                return
+
+            data_row[0] = full_selected_path
+            data_row[1] = PARENT_DIRS['parent_dir_input_ds']
+            data_row[2] = summary_file_name
+            data_row[5] = '1'
+            data_row[6] = str(num_datasets)
             
         elif analysis_type == 'summary':
-            data_row[1] = os.path.dirname(full_selected_path)    # pathSummary
-            data_row[2] = os.path.basename(full_selected_path)   # nameSummary
-            data_row[7] = PARENT_DIRS['fractalDimension']        # pathFD
+            data_row[1] = os.path.dirname(full_selected_path)
+            data_row[2] = os.path.basename(full_selected_path)
+            data_row[7] = PARENT_DIRS['fractalDimension']
         
         elif analysis_type == 'range_query':
-            data_row[3] = os.path.dirname(full_selected_path)    # pathRangeQuery_ts
-            data_row[4] = os.path.basename(full_selected_path)   # nameRangeQuery_ts
-            data_row[8] = PARENT_DIRS['fractalDimension']        # pathFD_ts
+            output_path_for_fd = ''
+            if rq_source == 'training_set':
+                output_path_for_fd = os.path.dirname(full_selected_path)
+            else:
+                output_path_for_fd = PARENT_DIRS['fractalDimension']
 
-        # Append the individual parameters to the data row.
+            data_row[3] = os.path.dirname(full_selected_path)
+            data_row[4] = os.path.basename(full_selected_path)
+            data_row[8] = output_path_for_fd
+
         data_row.extend(parameters_list)
 
-        # Write the configuration file using csv.writer
         with open(params_file_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f, delimiter=';')
-            writer.writerow(header_for_script) # Write the 10-column header.
-            writer.writerow(data_row)          # Write the data row (9 + N columns).
+            writer.writerow(header_for_script)
+            writer.writerow(data_row)
         
-        logging.debug(f"Created fdParameters.csv at: {params_file_path}")
+        try:
+            with open(params_file_path, 'r', encoding='utf-8') as f:
+                csv_content_for_log = f.read().strip()
+                logging.info(f"\n--- Content of fdParameters.csv ---\n{csv_content_for_log}\n--------------------------------------")
+        except Exception as e:
+            logging.error(f"Could not read back fdParameters.csv for debugging: {e}")
 
         # --- 3. Execute the fractalDimension.py script ---
         script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fractalDimension.py")
-        cmd = ["python", "-u", script_path] # Use '-u' for unbuffered output
+        cmd = ["python", "-u", script_path]
         
         logging.debug(f"Executing command: {' '.join(cmd)} in CWD: {DATA_BASE_PATH}")
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=DATA_BASE_PATH)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=DATA_BASE_PATH, encoding='utf-8', bufsize=1)
         
         socketio.start_background_task(monitor_process_and_emit_usage, process, stop_monitoring_event)
         
-        for line in process.stdout:
-            if line.strip().startswith('<System>'):
-                emit('fractal_dimension_progress', {'message': line.strip()})
-                socketio.sleep(0)
+        # For single-shot analyses, emit a structured progress event to force the
+        # frontend progress bar into a determinate state for a consistent user experience.
+        if analysis_type in ['summary', 'range_query']:
+            emit('fractal_dimension_dataset_progress', {
+                'current': 0, 'total': 1,
+                'datasetName': "Analysis in progress..."
+            })
+            socketio.sleep(0.1)
 
-        stdout, stderr = process.communicate()
+        current_dataset_count = 0
+        output_lines = []
+
+        for line in process.stdout:
+            stripped_line = line.strip()
+            output_lines.append(line)
+            logging.debug(f"Script Output: {stripped_line}")
+
+            if stripped_line.startswith('<System>'):
+                emit('fractal_dimension_progress', {'message': stripped_line})
+            
+            elif stripped_line.startswith('dataset: '):
+                try:
+                    current_dataset_count += 1
+                    file_path = stripped_line.split(':', 1)[1].strip()
+                    ds_name = os.path.basename(file_path)
+                    emit('fractal_dimension_dataset_progress', {
+                        'current': current_dataset_count, 'total': total_datasets_for_progress,
+                        'datasetName': ds_name
+                    })
+                except (ValueError, IndexError):
+                    logging.warning(f"Could not parse dataset line: {stripped_line}")
+            
+            socketio.sleep(0)
+
+        process.wait()
+        full_output = "".join(output_lines)
+
+        # For single-shot analyses, emit a final progress update to move the
+        # determinate bar to 100% before sending the completion signal.
+        if analysis_type in ['summary', 'range_query']:
+            emit('fractal_dimension_dataset_progress', {
+                'current': 1, 'total': 1,
+                'datasetName': "Finalizing results..."
+            })
+            socketio.sleep(0.1)
 
         # --- 4. Handle Script Results ---
         if process.returncode != 0:
-            logging.error(f"Error executing fractalDimension.py. STDERR: {stderr}")
-            emit('fractal_dimension_error', {'error': f"Script failed. Check backend logs for details.", 'details': stderr})
+            logging.error(f"Error executing fractalDimension.py. Full output: {full_output}")
+            emit('fractal_dimension_error', {'error': "Script failed. See details below.", 'details': full_output})
         else:
-            logging.info(f"fractalDimension.py executed successfully. STDOUT: {stdout}")
+            logging.info(f"fractalDimension.py executed successfully.")
             emit('fractal_dimension_complete', {'message': 'Fractal dimension calculation completed successfully.'})
 
     except Exception as e:
@@ -1810,8 +1959,9 @@ def get_fractal_sources():
 def get_fractal_data():
     """
     For each selected dataset ID, this function finds all related Fractal Dimension (FD) 
-    result files and returns a dictionary where each key is a dataset_id and its value 
-    is a list of all associated fractal data points.
+    result files and structures them into a nested dictionary for detailed visualization.
+    The structure separates E2 distribution values, group properties, and range query results
+    (differentiating between original and training sets).
     """
     selected_ids = request.json.get('dataset_ids', [])
     if not selected_ids:
@@ -1821,56 +1971,86 @@ def get_fractal_data():
     results_by_dataset = {}
 
     for dataset_id in selected_ids:
-        # This list will store all results for the current dataset_id
-        current_dataset_results = []
+        # This dictionary will hold the structured results for the current dataset_id
+        current_dataset_results = {
+            "e2Distribution": [],
+            "groupProperties": [],
+            "rangeQueryResults": {
+                "original": [],
+                "trainingSets": []
+            }
+        }
         
-        # --- Step 1: Find ORIGINAL data for the current dataset_id ---
+        # --- Step 1: Fetch E2 Distribution (per-dataset values) ---
         try:
-            # E2 value from the main summary file in 'parent_dir_input_ds'
             summary_path = os.path.join(PARENT_DIRS['parent_dir_input_ds'], f"input_params_{dataset_id}.csv")
             if os.path.exists(summary_path):
                 df = pd.read_csv(summary_path, delimiter=';')
-                if 'E2' in df.columns and not df['E2'].dropna().empty:
-                    current_dataset_results.append({'parameter': 'E2', 'source': 'Original', 'value': float(df['E2'].dropna().iloc[0])})
+                # Ensure required columns exist before proceeding
+                if 'datasetName' in df.columns and 'E2' in df.columns:
+                    # Filter out rows where E2 is NaN or empty
+                    e2_data = df[['datasetName', 'E2']].dropna(subset=['E2'])
+                    for index, row in e2_data.iterrows():
+                        current_dataset_results["e2Distribution"].append({
+                            'datasetName': row['datasetName'],
+                            'e2Value': float(row['E2'])
+                        })
+        except Exception as e:
+            logging.error(f"Error processing E2 distribution for {dataset_id}: {e}")
 
-            # FD parameters from the fractalDimension folder (related to the original summary)
+        # --- Step 2: Fetch Dataset Group Properties (FD of summary file columns) ---
+        try:
             fd_summary_path = os.path.join(PARENT_DIRS['fractalDimension'], f"fd_input_params_{dataset_id}.csv")
             if os.path.exists(fd_summary_path):
                 df = pd.read_csv(fd_summary_path, delimiter=';')
                 if not df.empty:
                     for param, value in df.iloc[0].dropna().to_dict().items():
-                        current_dataset_results.append({'parameter': param, 'source': 'Original', 'value': float(value)})
-            
-            # FD parameters from the fractalDimension folder (related to the original range query results)
+                        current_dataset_results["groupProperties"].append({'parameter': param, 'value': float(value)})
+        except Exception as e:
+            logging.error(f"Error processing Group Properties for {dataset_id}: {e}")
+
+        # --- Step 3: Fetch Range Query Results ---
+        try:
+            # Original Range Query FD
             fd_rq_path = os.path.join(PARENT_DIRS['fractalDimension'], f"fd_rqR_{dataset_id}.csv")
             if os.path.exists(fd_rq_path):
                 df = pd.read_csv(fd_rq_path, delimiter=';')
                 if not df.empty:
                     for param, value in df.iloc[0].dropna().to_dict().items():
-                        current_dataset_results.append({'parameter': param, 'source': 'Original', 'value': float(value)})
+                        current_dataset_results["rangeQueryResults"]["original"].append({'parameter': param, 'value': float(value)})
+            
+            # Training Set Range Query FD
+            path_in_main_fd_dir = os.path.join(PARENT_DIRS['fractalDimension'], f"fd_rqR_{dataset_id}_ts*.csv")
+            path_in_ts_dir_pattern = os.path.join(PARENT_DIRS['trainingSets'], dataset_id, '**', f"fd_rqR_{dataset_id}_ts*.csv")
+            print(f"DEBUG: Sto cercando i file del training set in: {path_in_ts_dir_pattern}")
 
-        except Exception as e:
-            logging.error(f"Error processing ORIGINAL files for {dataset_id}: {e}")
+            ts_files_main = glob.glob(path_in_main_fd_dir)
+            ts_files_recursive = glob.glob(path_in_ts_dir_pattern, recursive=True)
+            ts_files = sorted(ts_files_main + ts_files_recursive)
 
-        # --- Step 2: Find TRAINING SET data for the current dataset_id ---
-        try:
-            ts_files = glob.glob(os.path.join(PARENT_DIRS['fractalDimension'], f"fd_rqR_{dataset_id}_ts*.csv"))
             for f_path in ts_files:
                 filename = os.path.basename(f_path)
+                # Extract the training set identifier (e.g., '1', '2', etc.)
                 match = re.search(r'_ts(\d*)\.csv', filename)
                 ts_number = match.group(1) if match and match.group(1) else ''
                 source_name = f"Training Set {ts_number}".strip()
-
+                
+                ts_data = []
                 df = pd.read_csv(f_path, delimiter=';')
                 if not df.empty:
                     for param, value in df.iloc[0].dropna().to_dict().items():
-                        current_dataset_results.append({'parameter': param, 'source': source_name, 'value': float(value)})
+                        ts_data.append({'parameter': param, 'value': float(value)})
+                
+                if ts_data:
+                    current_dataset_results["rangeQueryResults"]["trainingSets"].append({
+                        "source": source_name,
+                        "data": ts_data
+                    })
         except Exception as e:
-             logging.error(f"Error processing TRAINING SET files for {dataset_id}: {e}")
+             logging.error(f"Error processing Range Query Results for {dataset_id}: {e}")
 
         # Add the collected results for this dataset_id to the main dictionary
-        if current_dataset_results:
-            results_by_dataset[dataset_id] = current_dataset_results
+        results_by_dataset[dataset_id] = current_dataset_results
 
     return jsonify(results_by_dataset)
 

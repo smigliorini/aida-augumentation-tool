@@ -5,8 +5,6 @@ import { FloatLabel } from 'primereact/floatlabel';
 import { InputNumber } from 'primereact/inputnumber';
 import { Button } from 'primereact/button';
 import { ProgressBar } from 'primereact/progressbar';
-// The direct import of 'io' is no longer needed as we use the centralized socket instance.
-// import { io } from 'socket.io-client';
 import { Toast } from 'primereact/toast';
 import MyMenu from '../Components/MyMenu';
 import { Divider } from 'primereact/divider';
@@ -31,8 +29,17 @@ function Generator() {
     // Dimensions is hardcoded to 2.
     const [dimensions] = useState(2);
     const [format, setFormat] = useState(null);
-    const [boxMaxSizeX, setBoxMaxSizeX] = useState(null);
-    const [boxMaxSizeY, setBoxMaxSizeY] = useState(null);
+    
+    // Renamed states to align with CSV column names for consistency.
+    const [avgSideLength0, setAvgSideLength0] = useState(null); // Was boxMaxSizeX
+    const [avgSideLength1, setAvgSideLength1] = useState(null); // Was boxMaxSizeY
+    const [avgArea, setAvgArea] = useState(null);               // Was pointPolySize
+    const [maxSeg, setMaxSeg] = useState(null);                 // Was pointMaxSeg
+
+    // State for E0 and E2 parameters.
+    const [e0, setE0] = useState(null);
+    const [e2, setE2] = useState(null);
+
     const [diagPercentage, setDiagPercentage] = useState(null);
     const [diagBuffer, setDiagBuffer] = useState(null);
     const [parcSrange, setParcSrange] = useState(null);
@@ -41,8 +48,6 @@ function Generator() {
     const [compress, setCompress] = useState(false);
     const [bitPropability, setBitProbability] = useState(null);
     const [bitDigits, setBitDigits] = useState(null);
-    const [pointPolySize, setPointPolySize] = useState(null);
-    const [pointMaxSeg, setPointMaxSeg] = useState(null);
     const [seed, setSeed] = useState(null);
 
     // State for the bounding box coordinates.
@@ -71,6 +76,9 @@ function Generator() {
     const [csvFile, setCsvFile] = useState(null);
     const [useCsvUpload, setUseCsvUpload] = useState(false);
 
+    // State for enabling expert user mode.
+    const [isExpertMode, setIsExpertMode] = useState(false);
+
     // State for file explorer and output directory.
     const [selectedFolder, setSelectedFolder] = useState(null);
     const [selectedFolderParentDir, setSelectedFolderParentDir] = useState(null);
@@ -84,16 +92,14 @@ function Generator() {
 
     // --- COMPONENT CONFIGURATION ---
 
-    // Defines the columns for the datasets table.
+    // Defines the columns for the datasets table, including E0 and E2.
     const columns = [
         { field: 'distribution', header: 'Distribution' }, { field: 'x1', header: 'X1' },
         { field: 'y1', header: 'Y1' }, { field: 'x2', header: 'X2' }, { field: 'y2', header: 'Y2' },
-        { field: 'cardinality', header: 'Cardinality' }, { field: 'dimensions', header: 'Dimensions' },
-        { field: 'geometry', header: 'Geometry' }, { field: 'format', header: 'Format' },
-        { field: 'maxsize', header: 'Maxsize' }, { field: 'percentage', header: 'Percentage' },
-        { field: 'buffer', header: 'Buffer' }, { field: 'srange', header: 'Srange' },
-        { field: 'dither', header: 'Dither' }, { field: 'probability', header: 'BitProbability' },
-        { field: 'digits', header: 'Digits' },
+        { field: 'cardinality', header: 'Cardinality' },
+        { field: 'maxsize', header: 'avg_side_lengths' }, { field: 'polysize', header: 'avg_area' },
+        { field: 'maxseg', header: 'max_seg' },
+        { field: 'E0', header: 'E0' }, { field: 'E2', header: 'E2' }, // New columns
         {
             header: 'Actions',
             body: (rowData) => (<Button icon="pi pi-trash" className="p-button-danger" onClick={() => handleDelete(rowData)} />)
@@ -101,13 +107,14 @@ function Generator() {
     ];
 
     // Maps distribution-geometry combinations to their specific input fields.
+    // The input field for max_seg is now only shown for Polygon.
     const dependentFieldsMap = {
-        'Uniform-Point': [], 'Uniform-Box': ['boxMaxSize'], 'Uniform-Polygon': ['pointPolySize', 'pointMaxSeg'],
-        'Diagonal-Point': ['diagPercentage', 'diagBuffer'], 'Diagonal-Box': ['diagPercentage', 'diagBuffer', 'boxMaxSize'], 'Diagonal-Polygon': ['diagPercentage', 'diagBuffer', 'pointPolySize', 'pointMaxSeg'],
-        'Gaussian-Point': [], 'Gaussian-Box': ['boxMaxSize'], 'Gaussian-Polygon': ['pointPolySize', 'pointMaxSeg'],
+        'Uniform-Point': [], 'Uniform-Box': [], 'Uniform-Polygon': ['maxSeg'],
+        'Diagonal-Point': ['diagPercentage', 'diagBuffer'], 'Diagonal-Box': ['diagPercentage', 'diagBuffer'], 'Diagonal-Polygon': ['diagPercentage', 'diagBuffer', 'maxSeg'],
+        'Gaussian-Point': [], 'Gaussian-Box': [], 'Gaussian-Polygon': ['maxSeg'],
         'Parcel-Box': ['parcSrange', 'parcDither'], 'Parcel-Polygon': ['parcSrange', 'parcDither'],
-        'Bit-Point': ['bitPropability', 'bitDigits'], 'Bit-Box': ['bitPropability', 'bitDigits', 'boxMaxSize'], 'Bit-Polygon': ['bitPropability', 'bitDigits', 'pointPolySize', 'pointMaxSeg'],
-        'Sierpinski-Point': [], 'Sierpinski-Box': ['boxMaxSize'], 'Sierpinski-Polygon': ['pointPolySize', 'pointMaxSeg'],
+        'Bit-Point': ['bitPropability', 'bitDigits'], 'Bit-Box': ['bitPropability', 'bitDigits'], 'Bit-Polygon': ['bitPropability', 'bitDigits', 'maxSeg'],
+        'Sierpinski-Point': [], 'Sierpinski-Box': [], 'Sierpinski-Polygon': ['maxSeg'],
     };
 
     // Options for the main dropdown menus.
@@ -128,16 +135,17 @@ function Generator() {
         setDistribution(selectedDistribution);
         // Clear all optional fields to ensure a clean state.
         setDiagPercentage(null); setDiagBuffer(null); setParcSrange(null); setParcDither(null);
-        setBitProbability(null); setBitDigits(null); setBoxMaxSizeX(null); setBoxMaxSizeY(null);
-        setPointPolySize(null); setPointMaxSeg(null);
+        setBitProbability(null); setBitDigits(null); 
+        setAvgSideLength0(null); setAvgSideLength1(null); setAvgArea(null); setMaxSeg(null);
+        setE0(null); setE2(null);
     };
 
     // Resets fields and sets the default format when the geometry type changes.
     const onGeometryChange = (e) => {
         const selectedGeometry = e.value;
         setGeometry(selectedGeometry);
-        // Clear geometry-specific fields.
-        setBoxMaxSizeX(null); setBoxMaxSizeY(null); setPointPolySize(null); setPointMaxSeg(null);
+        // maxSeg is now the only one that depends directly on geometry change
+        setMaxSeg(null);
         
         // Automatically set the format based on the selected geometry.
         if (selectedGeometry && selectedGeometry.name === 'Polygon') {
@@ -149,9 +157,9 @@ function Generator() {
         }
     };
     
-    // Handlers for box max size inputs.
-    const handleBoxMaxSizeXChange = (e) => setBoxMaxSizeX(e.value !== null ? parseFloat(e.value) : null);
-    const handleBoxMaxSizeYChange = (e) => setBoxMaxSizeY(e.value !== null ? parseFloat(e.value) : null);
+    // Renamed handlers for clarity
+    const handleAvgSideLength0Change = (e) => setAvgSideLength0(e.value !== null ? parseFloat(e.value) : null);
+    const handleAvgSideLength1Change = (e) => setAvgSideLength1(e.value !== null ? parseFloat(e.value) : null);
 
     // Effect hook to manage the WebSocket connection.
     useEffect(() => {
@@ -208,30 +216,66 @@ function Generator() {
             return;
         }
 
-        const currentComboKey = `${distribution.name}-${geometry.name}`;
+        // Validation for maxSeg with Polygons.
+        if (geometry.name === 'Polygon' && maxSeg !== null && maxSeg < 4) {
+            toast.current.show({ severity: 'error', summary: 'Validation Error', detail: 'max_seg must be 4 or greater for Polygons.', life: 5000 });
+            return;
+        }
+
         const newId = idCounter;
 
         // Build the dataset object with all common parameters.
         const dataToSend = {
             id: newId,
-            distribution: distribution ? distribution.name.toLowerCase() : '',
-            cardinality: cardinality !== null ? parseInt(cardinality, 10) : 0,
-            dimensions: dimensions !== null ? parseInt(dimensions, 10) : 0,
-            geometry: geometry ? geometry.name.toLowerCase() : '',
-            format: format ? format.name.toLowerCase() : '',
+            distribution: distribution.name.toLowerCase(),
+            cardinality: parseInt(cardinality, 10),
+            dimensions: parseInt(dimensions, 10),
+            geometry: geometry.name.toLowerCase(),
+            format: format.name.toLowerCase(),
             x1: x1, y1: y1, x2: x2, y2: y2,
         };
 
-        // Add optional parameters based on the current selection.
-        if (dependentFieldsMap[currentComboKey]?.includes('boxMaxSize')) dataToSend.maxsize = `${boxMaxSizeX.toFixed(1)},${boxMaxSizeY.toFixed(1)}`;
-        if (dependentFieldsMap[currentComboKey]?.includes('diagPercentage') && diagPercentage !== null) dataToSend.percentage = diagPercentage;
-        if (dependentFieldsMap[currentComboKey]?.includes('diagBuffer') && diagBuffer !== null) dataToSend.buffer = diagBuffer;
-        if (dependentFieldsMap[currentComboKey]?.includes('parcSrange') && parcSrange !== null) dataToSend.srange = parcSrange;
-        if (dependentFieldsMap[currentComboKey]?.includes('parcDither') && parcDither !== null) dataToSend.dither = parcDither;
-        if (dependentFieldsMap[currentComboKey]?.includes('bitPropability') && bitPropability !== null) dataToSend.probability = bitPropability;
-        if (dependentFieldsMap[currentComboKey]?.includes('bitDigits') && bitDigits !== null) dataToSend.digits = bitDigits;
-        if (dependentFieldsMap[currentComboKey]?.includes('pointPolySize') && pointPolySize !== null) dataToSend.polysize = pointPolySize;
-        if (dependentFieldsMap[currentComboKey]?.includes('pointMaxSeg') && pointMaxSeg !== null) dataToSend.maxseg = pointMaxSeg;
+        // Add universal and optional parameters.
+        if (avgSideLength0 !== null && avgSideLength1 !== null) dataToSend.maxsize = `${avgSideLength0.toFixed(1)},${avgSideLength1.toFixed(1)}`;
+        if (avgArea !== null) dataToSend.polysize = avgArea;
+        if (e0 !== null) dataToSend.E0 = e0;
+        if (e2 !== null) dataToSend.E2 = e2;
+        
+        // Hybrid logic for max_seg.
+        switch (dataToSend.geometry) {
+            case 'point':
+                dataToSend.maxseg = 1; // Hardcode to 1 for Points
+                break;
+            case 'box':
+                dataToSend.maxseg = 4; // Hardcode to 4 for Boxes
+                break;
+            case 'polygon':
+                if (maxSeg !== null) { // Use user input for Polygons
+                    dataToSend.maxseg = maxSeg;
+                }
+                break;
+            default:
+                break;
+        }
+        
+        // Add distribution-specific parameters. Use hardcoded defaults unless in Expert Mode.
+        switch (dataToSend.distribution) {
+            case 'diagonal':
+                dataToSend.percentage = (isExpertMode && diagPercentage !== null) ? diagPercentage : 0.5;
+                dataToSend.buffer = (isExpertMode && diagBuffer !== null) ? diagBuffer : 0.5;
+                break;
+            case 'bit':
+                dataToSend.probability = (isExpertMode && bitPropability !== null) ? bitPropability : 0.2;
+                dataToSend.digits = (isExpertMode && bitDigits !== null) ? bitDigits : 10;
+                break;
+            case 'parcel':
+                dataToSend.srange = (isExpertMode && parcSrange !== null) ? parcSrange : 0.5;
+                dataToSend.dither = (isExpertMode && parcDither !== null) ? parcDither : 0.5;
+                break;
+            default:
+                break;
+        }
+
         if (affineMatrix) dataToSend.affinematrix = affineMatrix;
         if (compress) dataToSend.compress = compress;
         if (seed) dataToSend.seed = seed;
@@ -242,10 +286,11 @@ function Generator() {
 
         // Reset all input fields for the next entry.
         setDistribution(null); setGeometry(null); setCardinality(null);
-        setFormat(null); setBoxMaxSizeX(null); setBoxMaxSizeY(null); setDiagPercentage(null);
+        setFormat(null); setAvgSideLength0(null); setAvgSideLength1(null); setDiagPercentage(null);
         setDiagBuffer(null); setParcSrange(null); setParcDither(null); setAffineMatrix('');
-        setCompress(false); setBitProbability(null); setBitDigits(null); setPointPolySize(null);
-        setPointMaxSeg(null); setSeed(null); setX1(null); setY1(null); setX2(null); setY2(null);
+        setCompress(false); setBitProbability(null); setBitDigits(null); setAvgArea(null);
+        setMaxSeg(null); setSeed(null); setX1(null); setY1(null); setX2(null); setY2(null);
+        setE0(null); setE2(null);
     };
 
     // Copies the values from the last inserted dataset into the input fields.
@@ -260,7 +305,7 @@ function Generator() {
         // Helper to capitalize first letter for dropdowns.
         const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 
-        // Set state for all fields from the last dataset.
+        // Set state for all fields from the last dataset, including E0/E2.
         setDistribution({ name: capitalize(lastDataset.distribution) });
         setGeometry({ name: capitalize(lastDataset.geometry) });
         setX1(lastDataset.x1);
@@ -276,19 +321,21 @@ function Generator() {
         setParcDither(lastDataset.dither || null);
         setBitProbability(lastDataset.probability || null);
         setBitDigits(lastDataset.digits || null);
-        setPointPolySize(lastDataset.polysize || null);
-        setPointMaxSeg(lastDataset.maxseg || null);
+        setAvgArea(lastDataset.polysize || null);
+        setMaxSeg(lastDataset.maxseg || null);
+        setE0(lastDataset.E0 || null);
+        setE2(lastDataset.E2 || null);
         setAffineMatrix(lastDataset.affinematrix || '');
         setCompress(lastDataset.compress || false);
 
         // Handle composite fields like maxsize.
         if (lastDataset.maxsize) {
             const [x, y] = lastDataset.maxsize.split(',');
-            setBoxMaxSizeX(parseFloat(x));
-            setBoxMaxSizeY(parseFloat(y));
+            setAvgSideLength0(parseFloat(x));
+            setAvgSideLength1(parseFloat(y));
         } else {
-            setBoxMaxSizeX(null);
-            setBoxMaxSizeY(null);
+            setAvgSideLength0(null);
+            setAvgSideLength1(null);
         }
         
         toast.current.show({ severity: 'success', summary: 'Copied', detail: 'Last dataset values have been copied to the form.', life: 3000 });
@@ -346,9 +393,18 @@ function Generator() {
                 <Panel header="Generator" toggleable>
                     <Toast ref={toast} />
                     {/* Switch to toggle between manual input and CSV upload */}
-                    <div className="flex align-items-center">
-                        <InputSwitch checked={useCsvUpload} onChange={e => setUseCsvUpload(e.value)} />
-                        <label htmlFor="csvSwitch" className="ml-2">Upload CSV File</label>
+                    <div className="flex flex-wrap gap-4 align-items-center">
+                        <div className="flex align-items-center">
+                            <InputSwitch inputId="csvSwitch" checked={useCsvUpload} onChange={e => setUseCsvUpload(e.value)} />
+                            <label htmlFor="csvSwitch" className="ml-2">Upload CSV File</label>
+                        </div>
+                        {/* Expert mode switch, only visible for manual input */}
+                        {!useCsvUpload && (
+                             <div className="flex align-items-center">
+                                <InputSwitch inputId="expertSwitch" checked={isExpertMode} onChange={e => setIsExpertMode(e.value)} />
+                                <label htmlFor="expertSwitch" className="ml-2">Enable Expert Mode</label>
+                            </div>
+                        )}
                     </div>
 
                     {/* Manual input form, shown when CSV upload is disabled */}
@@ -365,19 +421,25 @@ function Generator() {
                                 <FloatLabel><InputNumber inputId="cardinality" value={cardinality} onChange={(e) => setCardinality(e.value)} variant="filled" /><label htmlFor="cardinality">Cardinality (#rows)</label></FloatLabel>
                                 <FloatLabel><InputNumber inputId="seed" value={seed} onChange={(e) => setSeed(e.value)} variant="filled" /><label htmlFor="seed">Seed</label></FloatLabel>
                                 
-                                {/* Conditionally rendered fields based on distribution and geometry */}
-                                {dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('boxMaxSize') && (<>
-                                    <FloatLabel><InputNumber inputId="boxMaxSizeX" value={boxMaxSizeX} onChange={handleBoxMaxSizeXChange} variant="filled" /><label htmlFor="boxMaxSizeX">Max Size X</label></FloatLabel>
-                                    <FloatLabel><InputNumber inputId="boxMaxSizeY" value={boxMaxSizeY} onChange={handleBoxMaxSizeYChange} variant="filled" /><label htmlFor="boxMaxSizeY">Max Size Y</label></FloatLabel>
-                                </>)}
-                                {dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('pointPolySize') && <FloatLabel><InputNumber inputId="pointPolySize" value={pointPolySize} onChange={(e) => setPointPolySize(e.value)} variant="filled" /><label htmlFor="pointPolySize">Poly Size</label></FloatLabel>}
-                                {dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('pointMaxSeg') && <FloatLabel><InputNumber inputId="pointMaxSeg" value={pointMaxSeg} onChange={(e) => setPointMaxSeg(e.value)} variant="filled" /><label htmlFor="pointMaxSeg">Max Segments</label></FloatLabel>}
-                                {dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('diagPercentage') && <FloatLabel><InputNumber inputId="diagPercentage" value={diagPercentage} onChange={(e) => setDiagPercentage(e.value)} variant="filled" /><label htmlFor="diagPercentage">Percentage</label></FloatLabel>}
-                                {dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('diagBuffer') && <FloatLabel><InputNumber inputId="diagBuffer" value={diagBuffer} onChange={(e) => setDiagBuffer(e.value)} variant="filled" /><label htmlFor="diagBuffer">Buffer</label></FloatLabel>}
-                                {dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('parcSrange') && <FloatLabel><InputNumber inputId="parcSrange" value={parcSrange} onChange={(e) => setParcSrange(e.value)} variant="filled" /><label htmlFor="parcSrange">Split Range</label></FloatLabel>}
-                                {dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('parcDither') && <FloatLabel><InputNumber inputId="parcDither" value={parcDither} onChange={(e) => setParcDither(e.value)} variant="filled" /><label htmlFor="parcDither">Dither</label></FloatLabel>}
-                                {dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('bitPropability') && <FloatLabel><InputNumber inputId="bitPropability" value={bitPropability} onChange={(e) => setBitProbability(e.value)} variant="filled" /><label htmlFor="bitPropability">Probability</label></FloatLabel>}
-                                {dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('bitDigits') && <FloatLabel><InputNumber inputId="bitDigits" value={bitDigits} onChange={(e) => setBitDigits(e.value)} variant="filled" /><label htmlFor="bitDigits">Digits</label></FloatLabel>}
+                                {/* Universal fields, always visible */}
+                                <FloatLabel><InputNumber inputId="avgSideLength0" value={avgSideLength0} onChange={handleAvgSideLength0Change} variant="filled" /><label htmlFor="avgSideLength0">avg_side_length_0</label></FloatLabel>
+                                <FloatLabel><InputNumber inputId="avgSideLength1" value={avgSideLength1} onChange={handleAvgSideLength1Change} variant="filled" /><label htmlFor="avgSideLength1">avg_side_length_1</label></FloatLabel>
+                                <FloatLabel><InputNumber inputId="avgArea" value={avgArea} onChange={(e) => setAvgArea(e.value)} variant="filled" /><label htmlFor="avgArea">avg_area</label></FloatLabel>
+                                
+                                {/* E0 and E2 fields, always visible */}
+                                <FloatLabel><InputNumber inputId="e0" value={e0} onChange={(e) => setE0(e.value)} variant="filled" /><label htmlFor="e0">E0</label></FloatLabel>
+                                <FloatLabel><InputNumber inputId="e2" value={e2} onChange={(e) => setE2(e.value)} variant="filled" /><label htmlFor="e2">E2</label></FloatLabel>
+                                
+                                {/* max_seg remains conditional and now has a minimum value. */}
+                                {dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('maxSeg') && <FloatLabel><InputNumber inputId="maxSeg" value={maxSeg} onChange={(e) => setMaxSeg(e.value)} min={3} variant="filled" /><label htmlFor="maxSeg">max_seg (min 3)</label></FloatLabel>}
+                                
+                                {/* Expert Mode fields. These are only visible when Expert Mode is enabled. */}
+                                {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('diagPercentage') && <FloatLabel><InputNumber inputId="diagPercentage" value={diagPercentage} onChange={(e) => setDiagPercentage(e.value)} variant="filled" placeholder="Default: 0.5" /><label htmlFor="diagPercentage">Percentage</label></FloatLabel>}
+                                {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('diagBuffer') && <FloatLabel><InputNumber inputId="diagBuffer" value={diagBuffer} onChange={(e) => setDiagBuffer(e.value)} variant="filled" placeholder="Default: 0.5" /><label htmlFor="diagBuffer">Buffer</label></FloatLabel>}
+                                {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('parcSrange') && <FloatLabel><InputNumber inputId="parcSrange" value={parcSrange} onChange={(e) => setParcSrange(e.value)} variant="filled" placeholder="Default: 0.5" /><label htmlFor="parcSrange">Split Range</label></FloatLabel>}
+                                {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('parcDither') && <FloatLabel><InputNumber inputId="parcDither" value={parcDither} onChange={(e) => setParcDither(e.value)} variant="filled" placeholder="Default: 0.5" /><label htmlFor="parcDither">Dither</label></FloatLabel>}
+                                {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('bitPropability') && <FloatLabel><InputNumber inputId="bitPropability" value={bitPropability} onChange={(e) => setBitProbability(e.value)} variant="filled" placeholder="Default: 0.2" /><label htmlFor="bitPropability">Probability</label></FloatLabel>}
+                                {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('bitDigits') && <FloatLabel><InputNumber inputId="bitDigits" value={bitDigits} onChange={(e) => setBitDigits(e.value)} variant="filled" placeholder="Default: 10" /><label htmlFor="bitDigits">Digits</label></FloatLabel>}
                                 
                                 {/* Action buttons */}
                                 <div className='flex justify-content-end flex-wrap gap-2'>

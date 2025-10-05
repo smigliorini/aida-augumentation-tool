@@ -1,7 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
-// The direct import of 'io' is no longer needed.
-// import { io } from 'socket.io-client';
 import { Dialog } from 'primereact/dialog';
 import { ProgressBar } from 'primereact/progressbar';
 
@@ -16,7 +14,7 @@ import { Panel } from 'primereact/panel';
 import { Divider } from 'primereact/divider';
 import { Dropdown } from 'primereact/dropdown';
 import { InputNumber } from 'primereact/inputnumber';
-import { MultiSelect } from 'primereact/multiselect';
+import { Checkbox } from 'primereact/checkbox'; // Import the Checkbox component
 import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
 import { Tag } from 'primereact/tag';
@@ -41,7 +39,7 @@ function Augmentation() {
     const [currentBinNum, setCurrentBinNum] = useState(null);
     const [currentNumQueries, setCurrentNumQueries] = useState(1);
     const [currentDistribution, setCurrentDistribution] = useState(null);
-    const [currentAugmentationTechniques, setCurrentAugmentationTechniques] = useState([]);
+    const [currentAugmentationTechniques, setCurrentAugmentationTechniques] = useState([]); // This state remains an array of strings
     const [augmentationTasks, setAugmentationTasks] = useState([]); // List of tasks to be executed.
     
     // State for distribution options and their loading status.
@@ -53,9 +51,8 @@ function Augmentation() {
     const [errorSummary, setErrorSummary] = useState('');
     const [errorDetails, setErrorDetails] = useState('');
     
-    // Refs for toast notifications. The WebSocket connection is now managed by the imported instance.
+    // Refs for toast notifications.
     const toast = useRef(null);
-    // const socket = useRef(null);
 
     // State for progress dialog and resource monitoring.
     const [showProgressDialog, setShowProgressDialog] = useState(false);
@@ -154,6 +151,12 @@ function Augmentation() {
             .then(response => {
                 const formattedOptions = response.data.map(dist => ({ label: dist.charAt(0).toUpperCase() + dist.slice(1), value: dist }));
                 setDistributionOptions(formattedOptions);
+
+                // If there is only one distribution available, select it automatically.
+                if (formattedOptions.length === 1) {
+                    setCurrentDistribution(formattedOptions[0].value);
+                    toast.current.show({ severity: 'info', summary: 'Auto-Selected', detail: `Distribution '${formattedOptions[0].label}' was automatically selected.`, life: 4000 });
+                }
             }).catch(err => {
                 const distErrorMessage = err.response?.data?.error || "Failed to load distribution options.";
                 toast.current.show({ severity: 'error', summary: 'Distribution Error', detail: distErrorMessage, life: 5000 });
@@ -170,7 +173,9 @@ function Augmentation() {
             setAugmentationTasks([]); setSelectedBinFile(node);
             // Infer the unique session code from the file path.
             const pathParts = node.data.path.split('/');
-            setUniqueCode(pathParts[1]);
+            if (pathParts.length > 1) {
+                setUniqueCode(pathParts[1]);
+            }
         } else {
             setSelectedBinFile(null); setUniqueCode(null);
         }
@@ -178,8 +183,12 @@ function Augmentation() {
     
     // Resets the form fields for adding a new augmentation task.
     const resetCurrentTaskForm = () => {
-        setCurrentBinNum(null); setCurrentNumQueries(1);
-        setCurrentDistribution(null); setCurrentAugmentationTechniques([]);
+        setCurrentBinNum(null); 
+        setCurrentNumQueries(1);
+        setCurrentAugmentationTechniques([]);
+        if (distributionOptions.length > 1) {
+            setCurrentDistribution(null);
+        }
     };
 
     // Validates and adds a new augmentation task to the list.
@@ -199,10 +208,7 @@ function Augmentation() {
 
     // Removes a task from the list of augmentation tasks.
     const handleRemoveTask = (taskIdToRemove) => {
-        // Filter the tasks array, keeping only tasks that don't match the ID to be removed.
         setAugmentationTasks(currentTasks => currentTasks.filter(task => task.id !== taskIdToRemove));
-        
-        // Show a confirmation toast.
         toast.current.show({ 
             severity: 'info', 
             summary: 'Task Removed', 
@@ -222,8 +228,10 @@ function Augmentation() {
         setIsExecuting(true); setShowProgressDialog(true); 
         setErrorSummary(''); setErrorDetails('');
         setProgressInfo({ current: 0, total: augmentationTasks.length, message: 'Initializing...' });
+        
         const fullPath = selectedBinFile.data.path;
         const trainingSetDirectoryPath = fullPath.substring(0, fullPath.lastIndexOf('/'));
+        
         const payload = {
             trainingSetPath: trainingSetDirectoryPath,
             pathDatasets: `parent_dir_dataset/${uniqueCode}`,
@@ -231,6 +239,36 @@ function Augmentation() {
             inputs: augmentationTasks,
         };
         socket.emit('run_augmentation', payload);
+    };
+
+    // Handler for individual technique checkbox changes.
+    const handleTechniqueChange = (e) => {
+        const technique = e.value;
+        let _techniques = [...currentAugmentationTechniques];
+
+        if (e.checked) {
+            // Add the technique to the array if it's not already there.
+            if (!_techniques.includes(technique)) {
+                _techniques.push(technique);
+            }
+        } else {
+            // Remove the technique from the array.
+            _techniques = _techniques.filter(item => item !== technique);
+        }
+
+        setCurrentAugmentationTechniques(_techniques);
+    };
+
+    // Handler for the "Select All" checkbox.
+    const handleSelectAllTechniques = (e) => {
+        if (e.checked) {
+            // Select all techniques by getting their values from the options array.
+            const allTechniqueValues = augmentationTechniqueOptions.map(opt => opt.value);
+            setCurrentAugmentationTechniques(allTechniqueValues);
+        } else {
+            // Deselect all techniques.
+            setCurrentAugmentationTechniques([]);
+        }
     };
 
     // --- RENDER HELPERS ---
@@ -255,7 +293,7 @@ function Augmentation() {
                 {/* Step 1: Bin File Selection */}
                 <div className="col-12">
                     <Card title="1. Select Bin File">
-                        <Message severity="info" text="Select a 'bin_..._ts.csv' file from '4. Balancing Analysis'. The source dataset and index folders will be inferred automatically." className="mb-3" />
+                        <Message severity="info" text="Select a 'bin_..._ts.csv' file from '4. Training Sets'. The source dataset and index folders will be inferred automatically." className="mb-3" />
                         <FileExplorer onFileSelect={handleBinFileSelect} rootKey="trainingSets" />
                     </Card>
                 </div>
@@ -297,10 +335,36 @@ function Augmentation() {
                                     <label htmlFor="distribution" className="font-bold block mb-2">Distribution</label>
                                     <Dropdown id="distribution" value={currentDistribution} options={distributionOptions} onChange={(e) => setCurrentDistribution(e.value)} placeholder="Select a Distribution" disabled={!selectedBinFile || distributionsLoading} loading={distributionsLoading}/>
                                 </div>
-                                <div className="col-12 md:col-6 xl:col-3 field p-fluid">
-                                    <label htmlFor="techniques" className="font-bold block mb-2">Technique(s)</label>
-                                    <MultiSelect id="techniques" value={currentAugmentationTechniques} options={augmentationTechniqueOptions} onChange={(e) => setCurrentAugmentationTechniques(e.value)} placeholder="Select Technique(s)" display="chip" />
+                                
+                                {/* New Checkbox section for techniques */}
+                                <div className="col-12 md:col-6 xl:col-3 field">
+                                    <label className="font-bold block mb-3">Technique(s)</label>
+                                    <div className="flex flex-wrap align-items-center gap-4">
+                                        {/* "Select All" Checkbox */}
+                                        <div className="flex align-items-center">
+                                            <Checkbox
+                                                inputId="selectAllTechniques"
+                                                onChange={handleSelectAllTechniques}
+                                                checked={currentAugmentationTechniques.length === augmentationTechniqueOptions.length}
+                                            />
+                                            <label htmlFor="selectAllTechniques" className="ml-2 font-bold">Select All</label>
+                                        </div>
+                                        
+                                        {/* Individual Technique Checkboxes */}
+                                        {augmentationTechniqueOptions.map((tech) => (
+                                            <div key={tech.value} className="flex align-items-center">
+                                                <Checkbox
+                                                    inputId={tech.value}
+                                                    value={tech.value}
+                                                    onChange={handleTechniqueChange}
+                                                    checked={currentAugmentationTechniques.includes(tech.value)}
+                                                />
+                                                <label htmlFor={tech.value} className="ml-2">{tech.label}</label>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
+
                                 <div className="col-12 text-right mt-3">
                                     <Button label="Add Task to List" icon="pi pi-plus" onClick={handleAddTask} />
                                 </div>

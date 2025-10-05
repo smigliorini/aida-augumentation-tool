@@ -1113,13 +1113,59 @@ def main():
 		# Seleziono da "main_data" tutte le righe che hanno "bin_label" e "distribution" selezionati ('2-3' e 'uniform') - queries incrementate e queries non incremeeeentate
 		dist_data_in = main_data[(main_data[f'{param_to_categorize}_class'] == bin_label) & (main_data['distribution'] == distribution)]
 		dist_data = main_data[(main_data[f'{param_to_categorize}_class'] == bin_label) & (main_data['distribution'] == distribution) & (main_data['datasetName'].isin(datasetName))]
+		"""
+		# --------------------------------------------------------------------------------------------------------------------------------------------------
+		# CASO SPECIALE: il numero di queries presente nel bin è pari a 0 - incremento di una queries
 		if (len(dist_data) == 0):
-			print("----------------------------------------------------------------------------------------------------")
-			print(f"PROCESSING INPUT {count + 1}! Required for this bin {num_queries} queries with {distribution} distribution.")
-			print("<System> This bin has no range queries! You cannot increase the bin with this version of 'augmentation'.")
-			print("<System> Processed input!")
-			print("----------------------------------------------------------------------------------------------------")
-			continue
+			print("<System> Special case: this bin no has queries!")
+			
+			print(f"<System> Starting {chosen_technique}...")
+			try:
+				# SELEZIONE DELLA QUERY DA SFRUTTARE PER LA TECNICA DI AUGMENTATION:
+				# Cardinality - Seleziono la query che sia fuori a "bin_label" ma che sia il più vicino possibile a questo intervallo
+
+				# Filtraggio delle Range Queries con "distribution", "cardinality" diversa da zero, che NON appartengano al "bin_label" attuale  e correlate a "datasetName"
+				noise_data = main_data[
+					(main_data['distribution'] == distribution) &  
+					(main_data['cardinality'] != 0.0) &
+					(main_data['cardinality_class'] != bin_label) &
+					(main_data['datasetName'].isin(datasetName))
+				]
+						
+				noise_data = noise_data.sort_values(by='cardinality', ascending=True)				# Ordinamento dei dati trovati per "cardinality" crescente (da più piccolo a più grande)
+				lower_bound, upper_bound = map(float, bin_label.split('-'))							# Estrazione dei due estremi del bin
+
+				# Calcolo di quanto OGNI query sia lontana dagli estremi inferiore e superiore del "bin_label" in analisi
+				noise_data['lower_diff'] = abs(noise_data['cardinality'] - lower_bound)				# estremo inferiore --> |cardinality - lower_bound|
+				noise_data['upper_diff'] = abs(noise_data['cardinality'] - upper_bound)				# estremo superiore --> |cardinality - upper_bound|
+				noise_data['total_diff'] = noise_data[['lower_diff', 'upper_diff']].sum(axis=1)		# somma delle due differenze
+				noise_data['min_diff'] = noise_data[['lower_diff', 'upper_diff']].min(axis=1)		# calcolo la differenza più piccola tra i due valori
+				noise_data = noise_data.sort_values(by='min_diff')									# riordino in base alla differenza più piccola
+
+				selected_row = noise_data.iloc[0]													# seleziono la prima riga, quella più vicina all'intervallo "bin_label"
+
+				if 
+
+				else:
+							print("<System> No appropriate noise data found.")
+
+
+
+
+
+
+
+			except Exception as e:
+				print(f"<System> An error occurred: {e}")
+				if os.path.exists(output_path):
+					os.remove(output_path)
+					print(f"<System> Removed file at {output_path} due to error.")
+												
+"""
+
+
+
+
 		# --------------------------------------------------------------------------------------------------------------------------------------------------
 		# CASO 1: il numero di queries richiesto è già pari al numero di queries presenti nel bin selezionato - FINITO
 		if len(dist_data_in) == num_queries:
@@ -1131,7 +1177,7 @@ def main():
 		elif len(dist_data_in) > num_queries:
 			print()
 			print("----------------------------------------------------------------------------------------------------")
-			print(f"PROCESSING INPUT {count + 1}! Required for this bin {num_queries} queries with {distribution} distribution.")
+			print(f"PROCESSING INPUT {count}! Required for this bin {num_queries} queries with {distribution} distribution.")
 			print(f"This bin requires deleting {len(dist_data_in) - num_queries} queries.")
 			
 			# divisione tra queries che devono rimanere e queries che devono essere eliminate
@@ -1176,20 +1222,24 @@ def main():
 				print()
 				print(f"<System> Generating the number query {num_queries_inserted + 1}:")
 				
-				row = dist_data.sample(n=1).iloc[0]		# estrazione di una riga casuale da "dist_data" che sarà la base su cui applicare la tecnica di "augmentation"
-				file_index = row.name					# salvataggio dell'indice della riga in questione
-				dataset_name = row['datasetName']		# nome del dataset da modificare o duplicare
-
-				print(f"DEBUG: Il valore di pathTrainingSet ricevuto è: '{pathTrainingSet}'")
+				if len(dist_data) != 0:
+					row = dist_data.sample(n=1).iloc[0]		# estrazione di una riga casuale da "dist_data" che sarà la base su cui applicare la tecnica di "augmentation"
+					file_index = row.name					# salvataggio dell'indice della riga in questione
+					dataset_name = row['datasetName']		# nome del dataset da modificare o duplicare
 
 				# definizione della cartella dove caricare i datasets generati dalle tecniche di augmentation! Se la cartella non esiste, la creo
-				training_set_folder_name = os.path.basename(os.path.dirname(pathTrainingSet))
-				folder_output = os.path.join("datasetsAugmentation", training_set_folder_name)
+				folder_output = os.path.join("datasetsAugmentation", '/'.join(pathTrainingSet.split('/')[1:]))
 				if not os.path.exists(folder_output):		
 					os.makedirs(folder_output)
 
 				# Le tecniche di augmentation vengono selezionate in base a probabilità pesate
-				if len(datasetName) == 1:		# ... se ho solo un dataset, non ha senso fare il "merge" (per usare il "merge", c'è bisogno di almeno due datasets)
+				if len(dist_data) == 0:
+					probabilities = {
+						"rotation": 0.0,	# 0% chance
+						"noise": 1.0,		# 100% chance
+						"merge": 0			# 0% chance
+					}
+				elif len(datasetName) == 1:		# ... se ho solo un dataset, non ha senso fare il "merge" (per usare il "merge", c'è bisogno di almeno due datasets)
 					probabilities = {
 						"rotation": 0.6,	# 60% chance
 						"noise": 0.4,		# 40% chance
@@ -1211,6 +1261,7 @@ def main():
 				"""
 				# Selezione di una tecnica casuale pesata
 				chosen_technique = random.choices(list(probabilities.keys()), weights=list(probabilities.values()))[0]
+				#chosen_technique = "noise"
 				print(f"<System> The technique used for augmentation is '{chosen_technique}'.")
 				
 				# -------------------------------------------------------------------------------------------------------------------------------------------
@@ -1269,7 +1320,7 @@ def main():
 						# SELEZIONE DELLA QUERY DA SFRUTTARE PER LA TECNICA DI AUGMENTATION:
 						# Cardinality - Seleziono la query che sia fuori a "bin_label" ma che sia il più vicino possibile a questo intervallo
 						if param_to_categorize == "cardinality":
-
+							
 							# Filtraggio delle Range Queries con "distribution", "cardinality" diversa da zero, che NON appartengano al "bin_label" attuale  e correlate a "datasetName"
 							noise_data = main_data[
 								(main_data['distribution'] == distribution) &  
@@ -1277,10 +1328,10 @@ def main():
 								(main_data['cardinality_class'] != bin_label) &
 								(main_data['datasetName'].isin(datasetName))
 							]
-							
+
 							noise_data = noise_data.sort_values(by='cardinality', ascending=True)				# Ordinamento dei dati trovati per "cardinality" crescente (da più piccolo a più grande)
 							lower_bound, upper_bound = map(float, bin_label.split('-'))							# Estrazione dei due estremi del bin
-
+							
 							# Calcolo di quanto OGNI query sia lontana dagli estremi inferiore e superiore del "bin_label" in analisi
 							noise_data['lower_diff'] = abs(noise_data['cardinality'] - lower_bound)				# estremo inferiore --> |cardinality - lower_bound|
 							noise_data['upper_diff'] = abs(noise_data['cardinality'] - upper_bound)				# estremo superiore --> |cardinality - upper_bound|
@@ -1289,7 +1340,7 @@ def main():
 							noise_data = noise_data.sort_values(by='min_diff')									# riordino in base alla differenza più piccola
 
 							selected_row = noise_data.iloc[0]													# seleziono la prima riga, quella più vicina all'intervallo "bin_label"
-
+						
 						# No Cardinality - seleziono una qualsiasi tra le queries appartenenti a "bin_label"
 						else:
 							existing_column = f"{param_to_categorize}_class"		# variabile di supporto per selezionare la colonna corretta con le label
@@ -1314,7 +1365,7 @@ def main():
 								df = pd.read_csv(file_path)											# tentativo di apertura di "file_path"
 							except FileNotFoundError:												# se il file non viene aperto correttamente, stampa messaggio di errore
 								print("File not found. Exiting.")
-								
+							
 							df = pd.read_csv(file_path, delim_whitespace=True, skiprows=0)			# lettura della tabella ricapitolativa dell'indice spaziale
 							coordinates_df = df[['xmin', 'ymin', 'xmax', 'ymax']]					# estrazione delle coordinate delle finestre di ciascuna partizione del dataset in questione
 							name_df = df[['ID']]													# estrazione dei nomi di ciascuna partizione del dataset in questione														
@@ -1344,17 +1395,17 @@ def main():
 
 							with open(input_dataset, 'r') as input_file:								# apertura del file contenente il dataset in analisi
 								content = input_file.read()												# lettura e caricamento in "content" del dataset in analisi
-							with open(output_path, 'w') as output_file:								# apertura del file dove scrivere il nuovo dataset
+							with open(output_path, 'w') as output_file:									# apertura del file dove scrivere il nuovo dataset
 								output_file.write(content)												# copia del dataset in analisi ("content") nel file che conterrà il nuovo dataset
 							
 							# capisco se dovrò aumentare o diminuire la cardinalità
-							if param_to_categorize == "cardinality":
-								if selected_cardinality > bin_data['cardinality'].iloc[0]:				# in selected_cardinality ho una cardinalità o subito sopra o subito sotto al bin in analisi
+							if param_to_categorize == "cardinality" or len(dist_data) == 0:
+								if selected_cardinality > float(bin_label.split("-")[0]):				# in selected_cardinality ho una cardinalità o subito sopra o subito sotto al bin in analisi
 									operation = "decrease"												# ... se subito SOPRA devo DECREMENTARE
 								else:
 									operation = "increase"												# ... se subito SOTTO devo INCFEMENTARE
 							
-							# ricerca di informazioni sul dataset selezionato (b = media lato 0, h = media lato 1, num_geatures = geometrie)
+							# ricerca di informazioni sul dataset selezionato (b = media lato 0, h = media lato 1, num_features = geometrie)
 							b, h, num_features = get_dataset_info(path_nameSummary, dataset_name)
 							count_geom_tot = count_lines_efficient(output_path)							# numero di geometrie nel dataset
 							count_inside = count_geom_tot * selected_cardinality						# numero geometrie nella query: numero geometrie totali * numero geometria nella query
@@ -1365,11 +1416,12 @@ def main():
 								coordinates_rq = (minX, minY, maxX, maxY)									# coordinate finestra di range query selezionata
 								
 								# parametro categorizzato - "cardinality"
-								if param_to_categorize == "cardinality":
+								if param_to_categorize == "cardinality" or len(dist_data) == 0:
 									print(f"<System> Noised dataset by '{operation}' geometries: '{output_path}'")
 									
-									bin_label = row['cardinality_class']									# cerco i valori del bin
-									lower_bound, upper_bound = bin_label.split('-')							# divido il bin in valore minimo e valore massimo
+									#label = selected_row['cardinality_class']								# cerco i valori del bin	
+									#lower_bound, upper_bound = label.split('-')								# divido il bin in valore minimo e valore massimo
+									lower_bound, upper_bound = bin_label.split("-")								# divido il bin in valore minimo e valore massimo
 									delta = random.uniform(0, float(upper_bound)-float(lower_bound))		# valore random che sia tra l'intervallo bin in analisi
 
 									#if(float(upper_bound) == 0.7):
@@ -1575,7 +1627,6 @@ def main():
 									# analizzo 20 queries
 									tent = 0
 									while tent != 20:
-										tent += 1
 										rq1_row = dist_data[dist_data['datasetName'] == dataset1].sample(1).reset_index(drop=True)					# seleziono una sola range query correlata al dataset selezionato
 										rq1_cardinality = rq1_row["cardinality"].iloc[0]															# seleziono la cardinalità della query scelta
 										rq1_features = rq1_cardinality * ds1_features																# numero di geometrie nella range query selezionata
@@ -1587,6 +1638,7 @@ def main():
 											update_rq_merge(rq1_row, dsNew_name, dsNew_cardinality, bin_label, path_nameRangeQueriesResult)
 											finish = True
 											break
+										tent += 1
 
 								# altrimenti analizzo le range queries legate al secondo dataset
 								if int(fleg2) == 0 and not finish:
@@ -1597,7 +1649,6 @@ def main():
 									# analizzo 20 queries
 									tent = 0
 									while tent != 20:
-										tent += 1
 										rq2_row = dist_data[dist_data['datasetName'] == dataset2].sample(1).reset_index(drop=True)					# seleziono una sola range query correlata al dataset selezionato
 										rq2_cardinality = rq2_row["cardinality"].iloc[0]															# seleziono la cardinalità della query scelta
 										rq2_features = rq2_cardinality * ds2_features																# numero di geometrie nella range query selezionata
@@ -1609,6 +1660,7 @@ def main():
 											update_rq_merge(rq2_row, dsNew_name, dsNew_cardinality, bin_label, path_nameRangeQueriesResult)
 											finish = True
 											break
+										tent += 1
 
 							# se il parametro categorizzato non è "cardinality", posso proseguire liberamente con il marge
 							else:
@@ -1627,7 +1679,9 @@ def main():
 
 						if not finish:
 							num_queries_inserted -= 1
-						print("Merge completed.")
+							print("<System> Merge is not possible!")
+						else:
+							print("<System> Merge completed.")
 
 					except Exception as e:
 						print(f"<System> An error occurred: {e}")
@@ -1654,7 +1708,7 @@ def main():
 		# --------------------------------------------------------------------------------------------------------------------------------------------------
 		# CASO 4: non ci sono queries che rispettino la distribuzione selezionata - FINITO
 		else:
-			print(f"PROCESSING INPUT {count + 1}! Required for this bin {num_queries} queries with {distribution} distribution.")
+			print(f"PROCESSING INPUT {count}! Required for this bin {num_queries} queries with {distribution} distribution.")
 			print(f"This bin does not contain any query with distribution {distribution}")
 
 		print()

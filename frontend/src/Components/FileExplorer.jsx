@@ -59,10 +59,28 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
 
     // Ref for the Toast component to show notifications programmatically.
     const toast = useRef(null);
-    // The hardcoded backend URL is no longer needed. We use API_BASE_URL from the socket module.
-    // const backendUrl = 'http://localhost:5000';
 
     // --- HELPER FUNCTIONS ---
+
+    /**
+     * Formats a file size in bytes into a more readable string (Bytes, KB, MB).
+     * @param {number} bytes The file size in bytes.
+     * @returns {string} The formatted file size string.
+     */
+    const formatFileSize = (bytes) => {
+        if (bytes === undefined || bytes === null) {
+            return ''; // Return empty for folders or items without a size.
+        }
+        if (bytes < 1024) {
+            return `${bytes} Bytes`;
+        }
+        const kilobytes = bytes / 1024;
+        if (kilobytes < 1024) {
+            return `${kilobytes.toFixed(1)} KB`;
+        }
+        const megabytes = kilobytes / 1024;
+        return `${megabytes.toFixed(1)} MB`;
+    };
 
     /**
      * Extracts the base directory from a full path.
@@ -98,12 +116,27 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
     };
     
     /**
+     * Fetches the root-level folders from the backend to initialize the tree.
+     */
+    const fetchRoots = useCallback(() => {
+        setLoading(true);
+        fetch(`${API_BASE_URL}/api/explorer/roots`)
+            .then(res => res.json())
+            .then(data => { setLoading(false); setNodes(data); })
+            .catch(error => {
+                setLoading(false);
+                console.error("Error fetching root folders:", error);
+                toast.current.show({ severity: 'error', summary: 'Error', detail: 'Cannot load root folders' });
+            });
+    }, []);
+
+    /**
      * Refreshes the contents of a parent node after one of its children has been modified (e.g., renamed or deleted).
      * @param {string} childKey The key of the child node that was changed.
      */
     const refreshParentOfNode = async (childKey) => {
         const pathParts = childKey.split('/');
-        // If the path has only one part, it's a root folder, so we refetch all roots.
+        // If the path has only one part, it's a root folder, so refetch all roots.
         if (pathParts.length <= 1) {
             fetchRoots();
             return;
@@ -125,21 +158,6 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         }
     };
     
-    /**
-     * Fetches the root-level folders from the backend to initialize the tree.
-     */
-    const fetchRoots = () => {
-        setLoading(true);
-        fetch(`${API_BASE_URL}/api/explorer/roots`)
-            .then(res => res.json())
-            .then(data => { setLoading(false); setNodes(data); })
-            .catch(error => {
-                setLoading(false);
-                console.error("Error fetching root folders:", error);
-                toast.current.show({ severity: 'error', summary: 'Error', detail: 'Cannot load root folders' });
-            });
-    }
-
     // --- API & DATA FETCHING ---
 
     /**
@@ -169,38 +187,68 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
             return { childFolders: [], childFiles: [] };
         }
     }, []);
+    
+    /**
+     * Recursively searches for a node by key and updates its children immutably.
+     * This is the new, robust helper function for updating the tree state.
+     * @param {Array} currentNodes - The array of nodes to search within.
+     * @param {string} key - The key of the node to update.
+     * @param {Array} newChildren - The new children array for the found node.
+     * @returns {Array} A new array of nodes with the target node updated.
+     */
+    const updateNodeInChildren = (currentNodes, key, newChildren) => {
+        return currentNodes.map(node => {
+            // Return a new node object with the original properties but with updated children.
+            if (node.key === key) {
+                return {
+                    ...node,
+                    children: newChildren,
+                    leaf: newChildren.length === 0
+                };
+            }
+
+            // If this node has children, recurse into them to find the target node.
+            if (node.children) {
+                return {
+                    ...node,
+                    children: updateNodeInChildren(node.children, key, newChildren)
+                };
+            }
+
+            // If it's not the target and has no children, return it unchanged.
+            return node;
+        });
+    };
 
     /**
-     * Reloads the content of the currently selected folder.
-     * Wrapped in useCallback for optimization.
+     * Reloads the content of the currently selected folder using an immutable update pattern.
+     * This is the refactored, more reliable refresh logic.
      */
     const refreshCurrentNodeContent = useCallback(async () => {
         if (!selectedNodeKey) return;
+
+        setLoading(true);
+        setNodes(currentNodes => updateNodeInChildren(currentNodes, selectedNodeKey, []));
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const nodeToRefresh = { key: selectedNodeKey }; // Only need the key to fetch content.
         
-        // Find the node in the current tree to reload its children.
-        const nodeToRefresh = findNodeByKey(nodes, selectedNodeKey);
-        if (nodeToRefresh) {
-            const { childFolders, childFiles } = await loadNodeContent(nodeToRefresh);
-            // Update the file list in the DataTable.
-            setFiles(childFiles);
+        const { childFolders, childFiles } = await loadNodeContent(nodeToRefresh);
+        
+        // Update the file list in the DataTable.
+        setFiles(childFiles);
 
-            // Update the tree with the new subfolders.
-            let newNodes = JSON.parse(JSON.stringify(nodes));
-            const nodeInNewTree = findNodeByKey(newNodes, selectedNodeKey);
-            if(nodeInNewTree) {
-                nodeInNewTree.children = childFolders;
-                // Mark as leaf if it has no children, so the expand icon disappears.
-                nodeInNewTree.leaf = childFolders.length === 0;
-            }
-            setNodes(newNodes);
-        }
+        // Update the tree state using the new immutable helper.
+        // The functional form of setNodes ensures we're updating from the latest state.
+        setNodes(currentNodes => updateNodeInChildren(currentNodes, selectedNodeKey, childFolders));
+        setExpandedKeys(prevKeys => ({ ...prevKeys, [selectedNodeKey]: true }));
 
-    }, [selectedNodeKey, nodes, loadNodeContent]);
+    }, [selectedNodeKey, loadNodeContent]);
     
     // useEffect hook to fetch root folders when the component mounts for the first time.
     useEffect(() => {
         fetchRoots();
-    }, []);
+    }, [fetchRoots]);
 
     // --- EVENT HANDLERS (Tree) ---
 
@@ -246,15 +294,8 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
 
         // Fetch children from the API.
         const { childFolders } = await loadNodeContent(node);
-        let newNodes = JSON.parse(JSON.stringify(nodes));
-        const nodeToUpdate = findNodeByKey(newNodes, node.key);
-        if (nodeToUpdate) {
-            nodeToUpdate.children = childFolders;
-            if (childFolders.length === 0) {
-                nodeToUpdate.leaf = true; // Mark as leaf if no subfolders are found.
-            }
-        }
-        setNodes(newNodes); // Update the tree structure.
+        
+        setNodes(currentNodes => updateNodeInChildren(currentNodes, node.key, childFolders));
         setExpandedKeys(event.expandedKeys); // Update the expanded state.
     };
 
@@ -393,36 +434,67 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
     };
 
     /**
-     * Handles the folder rename submission. Sends a PUT request with the new name.
+     * Handles the folder rename submission. It now checks if the folder is a dataset
+     * and calls the appropriate backend endpoint for either a standard or a deep rename.
      */
     const handleRenameFolder = async () => {
         if (!newFolderName || !currentNodeToRename) return;
 
-        const oldPath = getRelativePath(currentNodeToRename.key);
-        const baseDir = getBaseDirFromPath(currentNodeToRename.key);
-        
-        try {
-            const response = await fetch(`${API_BASE_URL}/api/folders/${oldPath}?base_dir=${baseDir}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ newName: newFolderName, baseDir: baseDir }),
-            });
+        // Check if the folder being renamed is a dataset folder.
+        const isDatasetFolder = currentNodeToRename.label.startsWith('dataset_');
 
-            if (!response.ok) throw new Error((await response.json()).error || 'Rename failed');
+        if (isDatasetFolder) {
+            // Logic for "deep renaming" a dataset.
+            if (!window.confirm(`This is a dataset folder. Renaming it will update all related files and folders across the system. This action cannot be undone. Continue?`)) {
+                return;
+            }
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/dataset/rename`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ old_id: currentNodeToRename.label, new_id: newFolderName }),
+                });
 
-            toast.current.show({ severity: 'success', summary: 'Success', detail: 'Folder renamed successfully.' });
-            setIsRenameDialogVisible(false);
-            setNewFolderName('');
-            
-            // Refresh the parent to show the renamed folder.
-            await refreshParentOfNode(currentNodeToRename.key);
-            
-            // Reset selection state.
-            setSelectedNodeKey(null);
-            setFiles([]);
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Dataset rename failed');
+                
+                toast.current.show({ severity: 'success', summary: 'Dataset Renamed', detail: result.message || 'All dataset items renamed successfully.' });
+                setIsRenameDialogVisible(false);
+                
+                // Reset selection and perform a full refresh of the explorer.
+                setSelectedNodeKey(null);
+                setFiles([]);
+                fetchRoots(); 
+            } catch (error) {
+                toast.current.show({ severity: 'error', summary: 'Rename Error', detail: error.message, life: 6000 });
+            }
+        } else {
+            // Standard logic for renaming a single, non-dataset folder.
+            const oldPath = getRelativePath(currentNodeToRename.key);
+            const baseDir = getBaseDirFromPath(currentNodeToRename.key);
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/folders/${oldPath}?base_dir=${baseDir}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ newName: newFolderName, baseDir: baseDir }),
+                });
 
-        } catch (error) {
-            toast.current.show({ severity: 'error', summary: 'Rename Error', detail: error.message });
+                if (!response.ok) throw new Error((await response.json()).error || 'Rename failed');
+
+                toast.current.show({ severity: 'success', summary: 'Success', detail: 'Folder renamed successfully.' });
+                setIsRenameDialogVisible(false);
+                setNewFolderName('');
+                
+                // Refresh the parent to show the renamed folder.
+                await refreshParentOfNode(currentNodeToRename.key);
+                
+                // Reset selection state.
+                setSelectedNodeKey(null);
+                setFiles([]);
+
+            } catch (error) {
+                toast.current.show({ severity: 'error', summary: 'Rename Error', detail: error.message });
+            }
         }
     };
 
@@ -442,7 +514,7 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
             toast.current.show({ severity: 'info', summary: 'Refreshing', detail: 'Updating folder tree...', life: 2000 });
             fetchRoots();
         }
-    }, [loading, selectedNodeKey, refreshCurrentNodeContent]);
+    }, [loading, selectedNodeKey, refreshCurrentNodeContent, fetchRoots]);
     
     // --- JSX TEMPLATES ---
 
@@ -465,6 +537,15 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         if (node.type === 'separator') return <Divider className="my-2" />;
         const icon = node.type === 'folder' ? "pi pi-folder" : "pi pi-file";
         return <div className="flex align-items-center"><i className={`${icon} mr-2`}></i><span>{node.label}</span></div>;
+    };
+
+    /**
+     * Template for rendering the file size column in the DataTable.
+     * It uses the formatFileSize helper to display the size in a readable format.
+     */
+    const sizeTemplate = (rowData) => {
+        // Format the size if the row data represents a file (which will have a size property).
+        return <span>{formatFileSize(rowData.size)}</span>;
     };
 
     /**
@@ -547,6 +628,7 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
                             dataKey="key"
                         >
                             <Column field="label" header="Name" body={nodeTemplate} sortable />
+                            <Column field="size" header="Size" body={sizeTemplate} sortable style={{ width: '120px' }} />
                             <Column header="Actions" body={fileActionTemplate} style={{ width: '150px' }} />
                         </DataTable>
                     </div>

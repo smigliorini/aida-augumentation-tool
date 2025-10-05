@@ -8,8 +8,6 @@ import { Panel } from 'primereact/panel';
 // Imports for real-time feedback
 import { Dialog } from 'primereact/dialog';
 import { ProgressBar } from 'primereact/progressbar';
-// The direct import of 'io' is no longer needed.
-// import { io } from 'socket.io-client';
 import FileExplorer from '../Components/FileExplorer';
 // Import the centralized socket instance.
 import { socket } from '../socket';
@@ -22,12 +20,7 @@ function Histogram() {
     const [selectedDatasetFolder, setSelectedDatasetFolder] = useState(null);
     const [selectedFolderParentDir, setSelectedFolderParentDir] = useState(null);
     const toast = useRef(null);
-    // The backendUrl constant is no longer needed as the URL is managed in the socket module.
-    // const backendUrl = 'http://localhost:5000';
 
-    // State for WebSocket, dialog visibility, and resource monitoring.
-    // The socket ref is no longer needed; the imported instance is used directly.
-    // const socket = useRef(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [dialogVisible, setDialogVisible] = useState(false);
     const [progress, setProgress] = useState(0);

@@ -4,8 +4,6 @@ import { FloatLabel } from 'primereact/floatlabel';
 import { InputNumber } from 'primereact/inputnumber';
 import { Button } from 'primereact/button';
 import { ProgressBar } from 'primereact/progressbar';
-// The direct import of 'io' is no longer needed.
-// import { io } from 'socket.io-client';
 import { Toast } from 'primereact/toast';
 import MyMenu from '../Components/MyMenu';
 import { Divider } from 'primereact/divider';
@@ -40,8 +38,6 @@ function RangeQuery() {
     const [result, setResult] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    // The socket ref is no longer needed; the imported instance is used directly.
-    // const socket = useRef(null);
     const [progress, setProgress] = useState(0);
     const toast = useRef(null);
 

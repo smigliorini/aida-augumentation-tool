@@ -1,0 +1,4 @@
+datasetName;distribution;geometry;x1;y1;x2;y2;num_features;max_seg;num_points;avg_area;avg_side_length_0;avg_side_length_1;E0;E2
+dataset1;uniform;box;1.5;3.5;8.5;9.5;5000;4;;0.1;0.2;0.5;;
+dataset2;diagonal;point;5.5;7.0;12.5;13.0;2000;1;;0.09;0.3;0.3;;
+dataset3;gaussian;polygon;9.5;3.5;16.5;9.5;3000;4;;0.02;0.1;0.2;;

@@ -39,3 +39,10 @@ docker-compose.override.yml
 .env
 *.env
 .vscode/
+
+# Ignora file specifici
+trainingSets/dataset_20251005_151537_2bfc68aa/training_set_1/rqR_dataset_20251005_151537_2bfc68aa_ts.csv
+
+# Puoi anche ignorare intere cartelle
+datasetsAugmentation/
+trainingSets/
