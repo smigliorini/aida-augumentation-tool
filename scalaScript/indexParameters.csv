@@ -1,4 +1,4 @@
 pathDatasets;nameDataset;pathIndexes;typePartition;num
-/data/parent_dir_dataset/dataset_20251005_163503_0e40acd3;dataset1.csv;/data/indexes/dataset_20251005_163503_0e40acd3;partitions;2
-/data/parent_dir_dataset/dataset_20251005_163503_0e40acd3;dataset2.csv;/data/indexes/dataset_20251005_163503_0e40acd3;partitions;2
-/data/parent_dir_dataset/dataset_20251005_163503_0e40acd3;dataset3.csv;/data/indexes/dataset_20251005_163503_0e40acd3;partitions;2
+/data/parent_dir_dataset/dataset_20251006_084422_c1f7239a;dataset1.csv;/data/indexes/dataset_20251006_084422_c1f7239a;partitions;10
+/data/parent_dir_dataset/dataset_20251006_084422_c1f7239a;dataset2.csv;/data/indexes/dataset_20251006_084422_c1f7239a;geometries;200
+/data/parent_dir_dataset/dataset_20251006_084422_c1f7239a;dataset3.csv;/data/indexes/dataset_20251006_084422_c1f7239a;bits;21500

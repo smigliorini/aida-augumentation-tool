@@ -13,6 +13,7 @@ import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
 import { Dialog } from 'primereact/dialog';
 import { Dropdown } from 'primereact/dropdown';
+import { Message } from 'primereact/message';
 import FileExplorer from '../Components/FileExplorer';
 // Import the centralized socket instance and API base URL.
 import { socket, API_BASE_URL } from '../socket';
@@ -29,7 +30,7 @@ function RangeQuery() {
     const [minY, setMinY] = useState(null);
     const [maxX, setMaxX] = useState(null);
     const [maxY, setMaxY] = useState(null);
-    const [areaint, setAreaint] = useState(null);
+    const [areaint, setAreaint] = useState(1); //TEMP: fixed input
 
     // State for managing the list of queries to be executed.
     const [queries, setQueries] = useState([]);
@@ -71,9 +72,24 @@ function RangeQuery() {
         { field: 'queryArea', header: 'Query Area' },
         { field: 'minX', header: 'Min X' }, { field: 'minY', header: 'Min Y' },
         { field: 'maxX', header: 'Max X' }, { field: 'maxY', header: 'Max Y' },
-        { field: 'areaint', header: 'Area Intersection' },
+        // { field: 'areaint', header: 'Area Intersection' },
         { header: 'Actions', body: (rowData) => (<Button icon="pi pi-trash" className="p-button-danger" onClick={() => handleDelete(rowData)} />) }
     ];
+
+    const downloadCsvTemplate = () => {
+        const csvContent = `datasetName;numQuery;queryArea;minX;minY;maxX;maxY;areaint;cardinality;executionTime;mbrTests;cardinality_class
+dataset1;1;0.02;1.07;5.66;1.09;5.69;0.49;3.07;52;4;0.0-0.031
+dataset1;2;0.03;1.52;6.45;1.53;6.48;0.49;3.29;50;4;0.0-0.0323
+dataset1;3;0.04;0.87;5.80;0.89;5.82;0.49;3.28;43;3;0.0-0.0312`;
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", "rq_input_template.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     // --- DATA FETCHING ---
 
@@ -105,6 +121,15 @@ function RangeQuery() {
         setSelectedFolderBaseDir(parentDir);
         fetchDatasetsForDropdown(folderName, parentDir);
     };
+
+    useEffect(() => {
+        if (minX !== null && maxX !== null && minY !== null && maxY !== null && maxX > minX && maxY > minY) {
+            const area = (maxX - minX) * (maxY - minY);
+            setQueryArea(area);
+        } else {
+            setQueryArea(null);
+        }
+    }, [minX, maxX, minY, maxY]);
 
     // Effect hook to manage the WebSocket connection.
     useEffect(() => {
@@ -160,7 +185,7 @@ function RangeQuery() {
 
     // Validates inputs and adds the current query configuration to the table.
     const insertQuery = () => {
-        if (!selectedDatasetForQuery || numQuery === null || queryArea === null || minX === null || minY === null || maxX === null || maxY === null || areaint === null) {
+        if (!selectedDatasetForQuery || numQuery === null || minX === null || minY === null || maxX === null || maxY === null || areaint === null) {
             toast.current.show({ severity: 'warn', summary: 'Warning', detail: 'Please select a dataset and fill all query fields.', life: 5000 });
             return;
         }
@@ -168,7 +193,7 @@ function RangeQuery() {
         setQueries([...queries, newQuery]);
         // Reset input fields for the next entry.
         setSelectedDatasetForQuery(null); setNumQuery(null); setQueryArea(null);
-        setMinX(null); setMinY(null); setMaxX(null); setMaxY(null); setAreaint(null);
+        setMinX(null); setMinY(null); setMaxX(null); setMaxY(null); //setAreaint(null);
     };
 
     // Removes a query from the table.
@@ -283,18 +308,22 @@ function RangeQuery() {
                         <InputSwitch checked={useCsvUpload} onChange={e => setUseCsvUpload(e.value)} />
                         <label htmlFor="csvSwitch" className="ml-2">Upload CSV File</label>
                     </div>
-                    
-                    {/* Display for the currently selected folder */}
-                    <div className="mb-3">
-                        <p className="font-bold">Current selected dataset folder: <span style={{ color: selectedFolder ? '#5cb85c' : '#dc3545' }}>{selectedFolder || 'No folder selected'}</span></p>
-                        {selectedFolder && selectedFolderBaseDir !== 'parent_dir_dataset' && (
-                            <p style={{ color: '#dc3545', fontSize: '0.8rem' }}>Warning: Selected folder is not from '1. Generator'. Datasets will not be available.</p>
-                        )}
-                    </div>
 
                     {/* Manual query input form */}
                     {!useCsvUpload ? (
                         <>
+                            <Message 
+                                severity={"warn"} 
+                                text={"Please select a folder from the '1. Generator' section in the explorer below."} 
+                                className="w-full justify-content-center mb-3" 
+                            />
+                            {/* Display for the currently selected folder */}
+                            <div className="mb-3">
+                                <p className="font-bold">Current selected dataset folder: <span style={{ color: selectedFolder ? '#5cb85c' : '#dc3545' }}>{selectedFolder || 'No folder selected'}</span></p>
+                                {selectedFolder && selectedFolderBaseDir !== 'parent_dir_dataset' && (
+                                    <p style={{ color: '#dc3545', fontSize: '0.8rem' }}>Warning: Selected folder is not from '1. Generator'. Datasets will not be available.</p>
+                                )}
+                            </div>
                             <div className="pt-4 flex flex-wrap gap-3">
                                 <FloatLabel>
                                     <Dropdown
@@ -306,13 +335,13 @@ function RangeQuery() {
                                     />
                                     <label htmlFor="datasetName">Dataset Name</label>
                                 </FloatLabel>
-                                <FloatLabel><InputNumber inputId="numQuery" value={numQuery} onValueChange={(e) => setNumQuery(e.value)} /><label htmlFor="numQuery">Num Queries</label></FloatLabel>
-                                <FloatLabel><InputNumber inputId="queryArea" value={queryArea} onValueChange={(e) => setQueryArea(e.value)} /><label htmlFor="queryArea">Query Area</label></FloatLabel>
-                                <FloatLabel><InputNumber inputId="minX" value={minX} onValueChange={(e) => setMinX(e.value)} /><label htmlFor="minX">Min X</label></FloatLabel>
-                                <FloatLabel><InputNumber inputId="minY" value={minY} onValueChange={(e) => setMinY(e.value)} /><label htmlFor="minY">Min Y</label></FloatLabel>
-                                <FloatLabel><InputNumber inputId="maxX" value={maxX} onValueChange={(e) => setMaxX(e.value)} /><label htmlFor="maxX">Max X</label></FloatLabel>
-                                <FloatLabel><InputNumber inputId="maxY" value={maxY} onValueChange={(e) => setMaxY(e.value)} /><label htmlFor="maxY">Max Y</label></FloatLabel>
-                                <FloatLabel><InputNumber inputId="areaint" value={areaint} onValueChange={(e) => setAreaint(e.value)} /><label htmlFor="areaint">Area Intersection</label></FloatLabel>
+                                <FloatLabel><InputNumber inputId="numQuery" value={numQuery} onValueChange={(e) => setNumQuery(e.value)} min={1}/><label htmlFor="numQuery">Num Queries</label></FloatLabel>
+                                <FloatLabel><InputNumber inputId="minX" value={minX} onValueChange={(e) => setMinX(e.value)} minFractionDigits={0} maxFractionDigits={10}/><label htmlFor="minX">Min X</label></FloatLabel>
+                                <FloatLabel><InputNumber inputId="minY" value={minY} onValueChange={(e) => setMinY(e.value)} minFractionDigits={0} maxFractionDigits={10}/><label htmlFor="minY">Min Y</label></FloatLabel>
+                                <FloatLabel><InputNumber inputId="maxX" value={maxX} onValueChange={(e) => setMaxX(e.value)} minFractionDigits={0} maxFractionDigits={10}/><label htmlFor="maxX">Max X</label></FloatLabel>
+                                <FloatLabel><InputNumber inputId="maxY" value={maxY} onValueChange={(e) => setMaxY(e.value)} minFractionDigits={0} maxFractionDigits={10}/><label htmlFor="maxY">Max Y</label></FloatLabel>
+                                <FloatLabel><InputNumber inputId="queryArea" value={queryArea} disabled /><label htmlFor="queryArea">Query Area (Calculated)</label></FloatLabel>
+                                {/* <FloatLabel><InputNumber inputId="areaint" value={areaint} onValueChange={(e) => setAreaint(e.value)} /><label htmlFor="areaint">Area Intersection</label></FloatLabel> */}
                                 <div className='flex justify-content-end flex-wrap'><Button onClick={copyLastQuery} disabled={queries.length === 0} icon="pi pi-copy" tooltip="Copy Last Query" className="p-button-secondary" /></div>
                                 <div className='flex justify-content-end flex-wrap'><Button onClick={insertQuery} disabled={!selectedFolder || selectedFolderBaseDir !== 'parent_dir_dataset'}>Insert Query</Button></div>
                                 <div className="flex justify-content-end flex-wrap"><Button onClick={generateQueries} disabled={!selectedFolder || selectedFolderBaseDir !== 'parent_dir_dataset' || queries.length === 0}>Submit</Button></div>
@@ -325,9 +354,16 @@ function RangeQuery() {
                         </>
                     ) : (
                         // CSV upload section
-                        <div className='pt-2 flex flex-wrap gap-3'>
-                            <FileUpload mode="basic" accept=".csv" chooseLabel="Choose CSV" onSelect={handleCsvFileUpload} auto={false} />
-                            <div className='flex justify-content-end flex-wrap'><Button onClick={generateQueriesCsv} disabled={!selectedFolder || selectedFolderBaseDir !== 'parent_dir_dataset' || !csvFile}>Submit CSV File</Button></div>
+                        <div className='pt-4'>
+                            <div className='pb-3'>
+                                <p className="m-0">Fill the CSV file with one row for each dataset to be generated.</p>
+                                <p className="m-0" style={{ fontSize: '18px', fontWeight: 'bold', color: '#9FDAA8' }}>IMPORTANT: Dataset names must not contain special characters, always as name1, box2, first3, ecc...</p>
+                            </div>
+                            <div className='flex flex-wrap gap-3'>
+                                <FileUpload mode="basic" accept=".csv" chooseLabel="Choose CSV" onSelect={handleCsvFileUpload} auto={false}/>
+                                <Button onClick={downloadCsvTemplate} label="Download CSV Template" icon="pi pi-download" className="p-button-secondary"/>
+                                <div className='flex justify-content-end flex-wrap'><Button onClick={generateQueriesCsv} disabled={!selectedFolder || selectedFolderBaseDir !== 'parent_dir_dataset' || !csvFile}>Submit CSV File</Button></div>
+                            </div>
                         </div>
                     )}
 

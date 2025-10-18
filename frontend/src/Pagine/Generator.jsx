@@ -33,13 +33,11 @@ function Generator() {
     // Renamed states to align with CSV column names for consistency.
     const [avgSideLength0, setAvgSideLength0] = useState(null); // Was boxMaxSizeX
     const [avgSideLength1, setAvgSideLength1] = useState(null); // Was boxMaxSizeY
-    const [avgArea, setAvgArea] = useState(null);               // Was pointPolySize
+    // avgArea is now calculated from avgSideLength0 * avgSideLength1, so its state is removed.
     const [maxSeg, setMaxSeg] = useState(null);                 // Was pointMaxSeg
 
-    // State for E0 and E2 parameters.
-    const [e0, setE0] = useState(null);
-    const [e2, setE2] = useState(null);
-
+    // State for E0 and E2 parameters has been removed as they are no longer needed.
+    
     const [diagPercentage, setDiagPercentage] = useState(null);
     const [diagBuffer, setDiagBuffer] = useState(null);
     const [parcSrange, setParcSrange] = useState(null);
@@ -64,8 +62,6 @@ function Generator() {
     const [result, setResult] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    // The local socket state is no longer needed; we use the imported 'socket' instance directly.
-    // const [socket, setSocket] = useState(null);
     const [progress, setProgress] = useState(0);
     const toast = useRef(null);
     const [canDownload, setCanDownload] = useState(false);
@@ -92,14 +88,13 @@ function Generator() {
 
     // --- COMPONENT CONFIGURATION ---
 
-    // Defines the columns for the datasets table, including E0 and E2.
+    // Defines the columns for the datasets table; E0 and E2 columns are removed.
     const columns = [
         { field: 'distribution', header: 'Distribution' }, { field: 'x1', header: 'X1' },
         { field: 'y1', header: 'Y1' }, { field: 'x2', header: 'X2' }, { field: 'y2', header: 'Y2' },
         { field: 'cardinality', header: 'Cardinality' },
         { field: 'maxsize', header: 'avg_side_lengths' }, { field: 'polysize', header: 'avg_area' },
         { field: 'maxseg', header: 'max_seg' },
-        { field: 'E0', header: 'E0' }, { field: 'E2', header: 'E2' }, // New columns
         {
             header: 'Actions',
             body: (rowData) => (<Button icon="pi pi-trash" className="p-button-danger" onClick={() => handleDelete(rowData)} />)
@@ -136,8 +131,8 @@ function Generator() {
         // Clear all optional fields to ensure a clean state.
         setDiagPercentage(null); setDiagBuffer(null); setParcSrange(null); setParcDither(null);
         setBitProbability(null); setBitDigits(null); 
-        setAvgSideLength0(null); setAvgSideLength1(null); setAvgArea(null); setMaxSeg(null);
-        setE0(null); setE2(null);
+        setAvgSideLength0(null); setAvgSideLength1(null); setMaxSeg(null);
+        // E0 and E2 reset logic removed.
     };
 
     // Resets fields and sets the default format when the geometry type changes.
@@ -208,6 +203,23 @@ function Generator() {
         }
     };
 
+    // Function to download the CSV template.
+    const downloadCsvTemplate = () => {
+        const csvContent = `datasetName;distribution;geometry;x1;y1;x2;y2;num_features;max_seg;num_points;avg_area;avg_side_length_0;avg_side_length_1;E0;E2
+dataset1;uniform;box;1.5;3.5;8.5;9.5;500;4;;0.1;0.2;0.5;;
+dataset2;uniform;box;5.5;7.0;12.5;13.0;200;4;;0.09;0.3;0.3;;
+dataset3;uniform;box;9.5;3.5;16.5;9.5;300;4;;0.02;0.1;0.2;;
+        `;
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", "template_generator.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     // Validates inputs and adds the current dataset configuration to the table.
     const insertDataset = () => {
         // Ensure all required fields are filled.
@@ -217,7 +229,7 @@ function Generator() {
         }
 
         // Validation for maxSeg with Polygons.
-        if (geometry.name === 'Polygon' && maxSeg !== null && maxSeg < 4) {
+        if (geometry.name === 'Polygon' && maxSeg !== null && maxSeg < 1) {
             toast.current.show({ severity: 'error', summary: 'Validation Error', detail: 'max_seg must be 4 or greater for Polygons.', life: 5000 });
             return;
         }
@@ -235,11 +247,11 @@ function Generator() {
             x1: x1, y1: y1, x2: x2, y2: y2,
         };
 
-        // Add universal and optional parameters.
-        if (avgSideLength0 !== null && avgSideLength1 !== null) dataToSend.maxsize = `${avgSideLength0.toFixed(1)},${avgSideLength1.toFixed(1)}`;
-        if (avgArea !== null) dataToSend.polysize = avgArea;
-        if (e0 !== null) dataToSend.E0 = e0;
-        if (e2 !== null) dataToSend.E2 = e2;
+        // Automatically calculate polysize (avg_area) and remove E0/E2 logic.
+        if (avgSideLength0 !== null && avgSideLength1 !== null) {
+            dataToSend.maxsize = `${avgSideLength0},${avgSideLength1}`;
+            dataToSend.polysize = avgSideLength0 * avgSideLength1; // Automatic calculation
+        }
         
         // Hybrid logic for max_seg.
         switch (dataToSend.geometry) {
@@ -284,13 +296,12 @@ function Generator() {
         setDatasets([...datasets, dataToSend]);
         setIdCounter(prevId => prevId + 1);
 
-        // Reset all input fields for the next entry.
+        // Reset all input fields for the next entry; avgArea, E0, and E2 setters removed.
         setDistribution(null); setGeometry(null); setCardinality(null);
         setFormat(null); setAvgSideLength0(null); setAvgSideLength1(null); setDiagPercentage(null);
         setDiagBuffer(null); setParcSrange(null); setParcDither(null); setAffineMatrix('');
-        setCompress(false); setBitProbability(null); setBitDigits(null); setAvgArea(null);
+        setCompress(false); setBitProbability(null); setBitDigits(null);
         setMaxSeg(null); setSeed(null); setX1(null); setY1(null); setX2(null); setY2(null);
-        setE0(null); setE2(null);
     };
 
     // Copies the values from the last inserted dataset into the input fields.
@@ -305,7 +316,7 @@ function Generator() {
         // Helper to capitalize first letter for dropdowns.
         const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 
-        // Set state for all fields from the last dataset, including E0/E2.
+        // Set state for all fields from the last dataset; avgArea, E0, E2 setters removed.
         setDistribution({ name: capitalize(lastDataset.distribution) });
         setGeometry({ name: capitalize(lastDataset.geometry) });
         setX1(lastDataset.x1);
@@ -321,10 +332,7 @@ function Generator() {
         setParcDither(lastDataset.dither || null);
         setBitProbability(lastDataset.probability || null);
         setBitDigits(lastDataset.digits || null);
-        setAvgArea(lastDataset.polysize || null);
         setMaxSeg(lastDataset.maxseg || null);
-        setE0(lastDataset.E0 || null);
-        setE2(lastDataset.E2 || null);
         setAffineMatrix(lastDataset.affinematrix || '');
         setCompress(lastDataset.compress || false);
 
@@ -414,31 +422,31 @@ function Generator() {
                                 {/* Input fields for manual data generation */}
                                 <FloatLabel><Dropdown inputId="distribution" value={distribution} onChange={onDistributionChange} options={typeDistribution} optionLabel="name" showClear className="w-10rem" variant="filled" /><label htmlFor="distribution">Distribution</label></FloatLabel>
                                 <FloatLabel><Dropdown inputId="geometry" value={geometry} onChange={onGeometryChange} options={typeGeometry} optionLabel="name" showClear className="w-10rem" variant="filled" /><label htmlFor="geometry">Geometry</label></FloatLabel>
-                                <FloatLabel><InputNumber inputId="x1" value={x1} onChange={(e) => setX1(e.value)} variant="filled" /><label htmlFor="x1">X1</label></FloatLabel>
-                                <FloatLabel><InputNumber inputId="y1" value={y1} onChange={(e) => setY1(e.value)} variant="filled" /><label htmlFor="y1">Y1</label></FloatLabel>
-                                <FloatLabel><InputNumber inputId="x2" value={x2} onChange={(e) => setX2(e.value)} variant="filled" /><label htmlFor="x2">X2</label></FloatLabel>
-                                <FloatLabel><InputNumber inputId="y2" value={y2} onChange={(e) => setY2(e.value)} variant="filled" /><label htmlFor="y2">Y2</label></FloatLabel>
-                                <FloatLabel><InputNumber inputId="cardinality" value={cardinality} onChange={(e) => setCardinality(e.value)} variant="filled" /><label htmlFor="cardinality">Cardinality (#rows)</label></FloatLabel>
+                                
+                                {/* Added decimal precision to all numeric inputs that might require it. */}
+                                <FloatLabel><InputNumber inputId="x1" value={x1} onChange={(e) => setX1(e.value)} minFractionDigits={0} maxFractionDigits={10} variant="filled" /><label htmlFor="x1">X1</label></FloatLabel>
+                                <FloatLabel><InputNumber inputId="y1" value={y1} onChange={(e) => setY1(e.value)} minFractionDigits={0} maxFractionDigits={10} variant="filled" /><label htmlFor="y1">Y1</label></FloatLabel>
+                                <FloatLabel><InputNumber inputId="x2" value={x2} onChange={(e) => setX2(e.value)} minFractionDigits={0} maxFractionDigits={10} variant="filled" /><label htmlFor="x2">X2</label></FloatLabel>
+                                <FloatLabel><InputNumber inputId="y2" value={y2} onChange={(e) => setY2(e.value)} minFractionDigits={0} maxFractionDigits={10} variant="filled" /><label htmlFor="y2">Y2</label></FloatLabel>
+                                
+                                <FloatLabel><InputNumber inputId="cardinality" value={cardinality} onChange={(e) => setCardinality(e.value)} variant="filled" min={1} maxFractionDigits={0}/><label htmlFor="cardinality">Cardinality (#rows)</label></FloatLabel>
                                 <FloatLabel><InputNumber inputId="seed" value={seed} onChange={(e) => setSeed(e.value)} variant="filled" /><label htmlFor="seed">Seed</label></FloatLabel>
                                 
-                                {/* Universal fields, always visible */}
-                                <FloatLabel><InputNumber inputId="avgSideLength0" value={avgSideLength0} onChange={handleAvgSideLength0Change} variant="filled" /><label htmlFor="avgSideLength0">avg_side_length_0</label></FloatLabel>
-                                <FloatLabel><InputNumber inputId="avgSideLength1" value={avgSideLength1} onChange={handleAvgSideLength1Change} variant="filled" /><label htmlFor="avgSideLength1">avg_side_length_1</label></FloatLabel>
-                                <FloatLabel><InputNumber inputId="avgArea" value={avgArea} onChange={(e) => setAvgArea(e.value)} variant="filled" /><label htmlFor="avgArea">avg_area</label></FloatLabel>
+                                {/* Universal fields, with decimal precision and avg_area removed */}
+                                <FloatLabel><InputNumber inputId="avgSideLength0" value={avgSideLength0} onChange={handleAvgSideLength0Change} minFractionDigits={0} maxFractionDigits={10} variant="filled" /><label htmlFor="avgSideLength0">avg_side_length_0</label></FloatLabel>
+                                <FloatLabel><InputNumber inputId="avgSideLength1" value={avgSideLength1} onChange={handleAvgSideLength1Change} minFractionDigits={0} maxFractionDigits={10} variant="filled" /><label htmlFor="avgSideLength1">avg_side_length_1</label></FloatLabel>
                                 
-                                {/* E0 and E2 fields, always visible */}
-                                <FloatLabel><InputNumber inputId="e0" value={e0} onChange={(e) => setE0(e.value)} variant="filled" /><label htmlFor="e0">E0</label></FloatLabel>
-                                <FloatLabel><InputNumber inputId="e2" value={e2} onChange={(e) => setE2(e.value)} variant="filled" /><label htmlFor="e2">E2</label></FloatLabel>
+                                {/* E0 and E2 fields have been removed from the UI. */}
                                 
                                 {/* max_seg remains conditional and now has a minimum value. */}
-                                {dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('maxSeg') && <FloatLabel><InputNumber inputId="maxSeg" value={maxSeg} onChange={(e) => setMaxSeg(e.value)} min={3} variant="filled" /><label htmlFor="maxSeg">max_seg (min 3)</label></FloatLabel>}
+                                {dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('maxSeg') && <FloatLabel><InputNumber inputId="maxSeg" value={maxSeg} onChange={(e) => setMaxSeg(e.value)} variant="filled" /><label htmlFor="maxSeg">max_seg</label></FloatLabel>}
                                 
-                                {/* Expert Mode fields. These are only visible when Expert Mode is enabled. */}
-                                {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('diagPercentage') && <FloatLabel><InputNumber inputId="diagPercentage" value={diagPercentage} onChange={(e) => setDiagPercentage(e.value)} variant="filled" placeholder="Default: 0.5" /><label htmlFor="diagPercentage">Percentage</label></FloatLabel>}
-                                {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('diagBuffer') && <FloatLabel><InputNumber inputId="diagBuffer" value={diagBuffer} onChange={(e) => setDiagBuffer(e.value)} variant="filled" placeholder="Default: 0.5" /><label htmlFor="diagBuffer">Buffer</label></FloatLabel>}
-                                {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('parcSrange') && <FloatLabel><InputNumber inputId="parcSrange" value={parcSrange} onChange={(e) => setParcSrange(e.value)} variant="filled" placeholder="Default: 0.5" /><label htmlFor="parcSrange">Split Range</label></FloatLabel>}
-                                {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('parcDither') && <FloatLabel><InputNumber inputId="parcDither" value={parcDither} onChange={(e) => setParcDither(e.value)} variant="filled" placeholder="Default: 0.5" /><label htmlFor="parcDither">Dither</label></FloatLabel>}
-                                {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('bitPropability') && <FloatLabel><InputNumber inputId="bitPropability" value={bitPropability} onChange={(e) => setBitProbability(e.value)} variant="filled" placeholder="Default: 0.2" /><label htmlFor="bitPropability">Probability</label></FloatLabel>}
+                                {/* Expert Mode fields. These are only visible when Expert Mode is enabled. Decimal precision added. */}
+                                {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('diagPercentage') && <FloatLabel><InputNumber inputId="diagPercentage" value={diagPercentage} onChange={(e) => setDiagPercentage(e.value)} minFractionDigits={0} maxFractionDigits={10} variant="filled" placeholder="Default: 0.5" /><label htmlFor="diagPercentage">Percentage</label></FloatLabel>}
+                                {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('diagBuffer') && <FloatLabel><InputNumber inputId="diagBuffer" value={diagBuffer} onChange={(e) => setDiagBuffer(e.value)} minFractionDigits={0} maxFractionDigits={10} variant="filled" placeholder="Default: 0.5" /><label htmlFor="diagBuffer">Buffer</label></FloatLabel>}
+                                {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('parcSrange') && <FloatLabel><InputNumber inputId="parcSrange" value={parcSrange} onChange={(e) => setParcSrange(e.value)} minFractionDigits={0} maxFractionDigits={10} variant="filled" placeholder="Default: 0.5" /><label htmlFor="parcSrange">Split Range</label></FloatLabel>}
+                                {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('parcDither') && <FloatLabel><InputNumber inputId="parcDither" value={parcDither} onChange={(e) => setParcDither(e.value)} minFractionDigits={0} maxFractionDigits={10} variant="filled" placeholder="Default: 0.5" /><label htmlFor="parcDither">Dither</label></FloatLabel>}
+                                {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('bitPropability') && <FloatLabel><InputNumber inputId="bitPropability" value={bitPropability} onChange={(e) => setBitProbability(e.value)} minFractionDigits={0} maxFractionDigits={10} variant="filled" placeholder="Default: 0.2" /><label htmlFor="bitPropability">Probability</label></FloatLabel>}
                                 {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('bitDigits') && <FloatLabel><InputNumber inputId="bitDigits" value={bitDigits} onChange={(e) => setBitDigits(e.value)} variant="filled" placeholder="Default: 10" /><label htmlFor="bitDigits">Digits</label></FloatLabel>}
                                 
                                 {/* Action buttons */}
@@ -458,11 +466,18 @@ function Generator() {
                         </>
                     )}
                     
-                    {/* CSV upload section, shown when enabled */}
+                    {/* CSV upload section, shown when enabled. Now includes instructions and a template download button. */}
                     {useCsvUpload && (
-                        <div className='pt-2 flex flex-wrap gap-3'>
-                            <FileUpload mode="basic" accept=".csv" chooseLabel="Choose CSV" onSelect={handleCsvFileUpload} auto={false} />
-                            <div className='flex justify-content-end flex-wrap'><Button onClick={generateDataCsv}>Submit CSV File</Button></div>
+                        <div className='pt-4'>
+                            <div className='pb-3'>
+                                <p className="m-0">Fill the CSV file with one row for each dataset to be generated.</p>
+                                <p className="m-0" style={{ fontSize: '18px', fontWeight: 'bold', color: '#9FDAA8' }}>IMPORTANT: Dataset names must not contain special characters, always as name1, box2, first3, ecc...</p>
+                            </div>
+                            <div className='flex flex-wrap gap-3'>
+                                <FileUpload mode="basic" accept=".csv" chooseLabel="Choose CSV" onSelect={handleCsvFileUpload} auto={false} />
+                                <Button onClick={downloadCsvTemplate} label="Download CSV Template" icon="pi pi-download" className="p-button-secondary" />
+                                <div className='flex justify-content-end flex-wrap'><Button onClick={generateDataCsv}>Submit CSV File</Button></div>
+                            </div>
                         </div>
                     )}
 

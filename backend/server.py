@@ -215,7 +215,7 @@ def run_rank_diff_socket(data):
         
         # Construct the summary filename using the extracted session ID.
         path_summaries_dir = PARENT_DIRS['parent_dir_input_ds']
-        name_summary_file = f"input_params_dataset_{session_id}.csv"
+        name_summary_file = f"input_params_collection_{session_id}.csv"
         
         # --- Dynamically Find Fractal Dimension Files using the extracted ID ---
         path_fd_dir = PARENT_DIRS['fractalDimension']
@@ -870,7 +870,7 @@ def create_unique_directory(parent_dir):
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     unique_id = uuid.uuid4().hex[:8]
-    dirname = os.path.join(parent_dir, f"dataset_{timestamp}_{unique_id}")
+    dirname = os.path.join(parent_dir, f"collection_{timestamp}_{unique_id}")
     os.makedirs(dirname, exist_ok=True)
     return dirname
 
@@ -1342,15 +1342,36 @@ def generate_data_from_csv(data):
         # This section is identical to generate_data: start monitor, run commands, and report progress.
         socketio.start_background_task(monitor_and_emit_usage, stop_monitoring_event)
 
+        progress_per_dataset = 100 / len(commands) if commands else 100
+        last_emitted_progress = -1
+
         for i, cmd in enumerate(commands):
             logging.debug(f'Executing command: {cmd}')
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
+
+            try:
+                total_lines = int(uploaded_csv_data[i].get('num_features', 0))
+            except (ValueError, TypeError):
+                total_lines = 0
+
+            lines_written = 0
+            base_progress = i * progress_per_dataset
 
             # Stream output directly to the corresponding file.
             with open(output_filenames[i], 'w', encoding='utf-8') as f:
                 for line in iter(process.stdout.readline, ''):
                     f.write(line)
-                    socketio.sleep(0)
+                    lines_written += 1
+
+            if total_lines > 0:
+                sub_progress = (lines_written / total_lines) * progress_per_dataset
+                current_total_progress = int(base_progress + sub_progress)
+
+                if current_total_progress > last_emitted_progress:
+                    emit('progress', {'progress': current_total_progress})
+                    last_emitted_progress = current_total_progress
+            
+            socketio.sleep(0)
             
             _, stderr = process.communicate()
 
@@ -1358,8 +1379,10 @@ def generate_data_from_csv(data):
                 emit('generate_data_error', {'error': f'Generator script failed: {stderr.strip() if stderr else "Unknown error"}'})
                 return
 
-            progress = int(((i + 1) / len(commands)) * 100)
-            emit('progress', {'progress': progress})
+            final_progress_step = int((i + 1) * progress_per_dataset)
+            if final_progress_step > last_emitted_progress:
+                emit('progress', {'progress': final_progress_step})
+                last_emitted_progress = final_progress_step
 
         emit('generate_data_complete', {'dataset_id': generated_folder_basename, 'input_csv_file': input_csv_filename})
 
@@ -1945,7 +1968,7 @@ def get_fractal_sources():
 
     # Regex to extract the base dataset ID from a filename
     # It captures the 'dataset_YYYYMMDD_HHMMSS_UUID' part
-    id_pattern = re.compile(r'(dataset_\d{8}_\d{6}_[0-9a-fA-F]{8})')
+    id_pattern = re.compile(r'(collection_\d{8}_\d{6}_[0-9a-fA-F]{8})')
 
     for f in all_files:
         match = id_pattern.search(os.path.basename(f))
@@ -2030,11 +2053,20 @@ def get_fractal_data():
 
             for f_path in ts_files:
                 filename = os.path.basename(f_path)
-                # Extract the training set identifier (e.g., '1', '2', etc.)
-                match = re.search(r'_ts(\d*)\.csv', filename)
-                ts_number = match.group(1) if match and match.group(1) else ''
-                source_name = f"Training Set {ts_number}".strip()
-                
+                source_name = ""
+                training_sets_base_path = os.path.join(PARENT_DIRS['trainingSets'], dataset_id)
+
+                if f_path.startswith(training_sets_base_path):
+                    try:
+                        relative_path = os.path.relpath(f_path, training_sets_base_path)
+                        source_name = relative_path.split(os.sep)[0]
+                    except ValueError:
+                         source_name = "Training Set (Errore Percorso)"
+                else:
+                    match = re.search(r'_ts(\d*)\.csv', filename)
+                    ts_number = match.group(1) if match and match.group(1) else ''
+                    source_name = f"Training Set {ts_number}".strip()
+
                 ts_data = []
                 df = pd.read_csv(f_path, delimiter=';')
                 if not df.empty:

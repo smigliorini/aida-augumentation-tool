@@ -143,7 +143,7 @@ function FractalDataExplorer({ refreshKey }) {
                                     {/* --- Section 1: E2 Distribution --- */}
                                     {data.e2Distribution && data.e2Distribution.length > 0 && (
                                         <div>
-                                            <h3 className="text-xl font-semibold mt-2 mb-3">Dataset Distribution (E2)</h3>
+                                            <h3 className="text-xl font-semibold mt-2 mb-3">Input Spatial Distribution (E2)</h3>
                                             <DataTable value={data.e2Distribution} stripedRows paginator rows={5} className="p-datatable-sm">
                                                 <Column field="datasetName" header="Dataset Name" sortable />
                                                 <Column field="e2Value" header="E2 Value" body={(rowData) => formatNumber(rowData.e2Value)} sortable />
@@ -155,7 +155,7 @@ function FractalDataExplorer({ refreshKey }) {
                                     {data.groupProperties && data.groupProperties.length > 0 && (
                                         <div>
                                             <Divider />
-                                            <h3 className="text-xl font-semibold mt-2 mb-3">Dataset Group Properties</h3>
+                                            <h3 className="text-xl font-semibold mt-2 mb-3">Input Spatial Properties</h3>
                                             {renderValueGrid(data.groupProperties)}
                                         </div>
                                     )}
@@ -164,7 +164,7 @@ function FractalDataExplorer({ refreshKey }) {
                                     {data.rangeQueryResults && (data.rangeQueryResults.original.length > 0 || data.rangeQueryResults.trainingSets.length > 0) && (
                                         <div>
                                             <Divider />
-                                            <h3 className="text-xl font-semibold mt-2 mb-3">Range Query Results</h3>
+                                            <h3 className="text-xl font-semibold mt-2 mb-3">Ground Truth Values</h3>
                                             {/* Original RQ */}
                                             {data.rangeQueryResults.original.length > 0 && (
                                                 <div className="mb-4">

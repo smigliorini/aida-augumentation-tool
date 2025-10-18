@@ -54,9 +54,9 @@ function FractalDimension() {
 
     // --- Static configuration objects ---
     const analysisTypeOptions = [
-        { label: 'Dataset Distribution (E2)', value: 'distribution' },
-        { label: 'Dataset Group Properties', value: 'summary' },
-        { label: 'Range Query Results', value: 'range_query' },
+        { label: 'Input Spatial Distributions (E2)', value: 'distribution' },
+        { label: 'Input Spatial Properties', value: 'summary' },
+        { label: 'Ground Truth Values', value: 'range_query' },
     ];
     
     const parameterConfig = {

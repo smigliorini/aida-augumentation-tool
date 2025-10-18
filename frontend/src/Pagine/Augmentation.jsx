@@ -293,7 +293,7 @@ function Augmentation() {
                 {/* Step 1: Bin File Selection */}
                 <div className="col-12">
                     <Card title="1. Select Bin File">
-                        <Message severity="info" text="Select a 'bin_..._ts.csv' file from '4. Training Sets'. The source dataset and index folders will be inferred automatically." className="mb-3" />
+                        <Message severity="info" text="Select a 'bin_colletion_DATE_TIME_UNIQUE-CODE_ts.csv' file from '4. Training Sets/[ Collection Name ]/Training_set_X'. The source colletion and index folders will be inferred automatically." className="mb-3" />
                         <FileExplorer onFileSelect={handleBinFileSelect} rootKey="trainingSets" />
                     </Card>
                 </div>

@@ -3,6 +3,7 @@ import {Menubar} from 'primereact/menubar';
 import { Link, useNavigate } from "react-router-dom";
 import {Avatar} from 'primereact/avatar';
 import { InputText } from "primereact/inputtext";
+import { Button } from 'primereact/button';
 
 function MyMenu(){
     const navigate = useNavigate();
@@ -15,12 +16,18 @@ function MyMenu(){
         {label: "4.Balancing Analysis", icon: 'pi pi-wrench', command: () => navigate('/rank')},
         {label: "5.Spatial Augmentation", icon: 'pi pi-arrow-circle-up', command: () => navigate('/augmentation')},
         {label: "6.Histogram", icon: 'pi pi-chart-bar', command: () => navigate('/histogram')},
-        {label: "Fractal Dimension", icon: 'pi pi-cloud', command: () => navigate('/fractal')}
+        // {label: "Fractal Dimension", icon: 'pi pi-cloud', command: () => navigate('/fractal')}
 
     ];
 
     const end = (
         <div className="flex align-items-center gap-2">
+            <Button 
+                label="Fractal Dimension" 
+                icon="pi pi-cloud" 
+                onClick={() => navigate('/fractal')} 
+                className="p-button-text"
+            />
             <InputText placeholder="Search" type="text" className="w-8rem sm:w-auto" />
             <Avatar shape='circle' icon="pi pi-user"/>
         </div>
