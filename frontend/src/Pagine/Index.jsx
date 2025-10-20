@@ -28,6 +28,9 @@ function Index() {
     const [cpuUsage, setCpuUsage] = useState(0);
     const [ramUsage, setRamUsage] = useState(0);
 
+    const [globalPartitionType, setGlobalPartitionType] = useState('partitions');
+    const [globalDimension, setGlobalDimension] = useState(2);
+
     // Consolidated state for progress information.
     const [progressInfo, setProgressInfo] = useState({
         progress: 0,
@@ -149,6 +152,8 @@ function Index() {
                                     dimension: 2
                                 }));
             setFolderContent(files);
+            setGlobalPartitionType('partitions');
+            setGlobalDimension(2);
         } catch (error) {
             console.error("Error fetching folder content for config:", error);
             toast.current.show({ severity: 'error', summary: 'Error', detail: `Failed to load folder content: ${error.message}`, life: 5000 });
@@ -207,6 +212,28 @@ function Index() {
             setIsIndexing(false);
             setShowProgressDialog(false);
         }
+    };
+
+    const handleApplyToAll = () => {
+        if (typeof globalDimension !== 'number' || isNaN(globalDimension)) {
+            toast.current.show({ severity: 'error', summary: 'Validation Error', detail: 'Global Dimension must be a valid number.', life: 3000 });
+            return;
+        }
+
+        const updatedFolderContent = folderContent.map(file => ({
+            ...file,
+            partitionType: globalPartitionType,
+            dimension: globalDimension
+        }));
+
+        setFolderContent(updatedFolderContent);
+        
+        toast.current.show({ 
+            severity: 'info', 
+            summary: 'Applied', 
+            detail: `Set all ${updatedFolderContent.length} files to Type: ${globalPartitionType}, Dimension: ${globalDimension}`, 
+            life: 3000 
+        });
     };
 
     const onRowEditComplete = (e) => {
@@ -284,8 +311,47 @@ function Index() {
                     </div>
                     {isIndexing && <p className="mt-4 text-center">Performing indexing. This may take some time...</p>}
                 </Dialog>
+                
                 <Dialog header={`Configure Indexing for: ${selectedDatasetFolder}`} visible={displayFileConfigDialog} style={{ width: '70vw' }} onHide={() => setDisplayFileConfigDialog(false)} footer={renderFileConfigDialogFooter}>
-                    <p className="mb-3">Please specify the **Partition Type** and **Dimension** for each file to be indexed.</p>
+                    <p className="mb-3">
+                        Please specify the **Partition Type** and **Dimension** for each file. 
+                        You can edit row by row, or use the controls below to apply a setting to all files.
+                    </p>
+                    
+                    <Panel header="Apply to All Files" toggleable className="mb-4">
+                        <div className="flex flex-wrap gap-3 align-items-end">
+                            <div className="flex-1 min-w-0" style={{ minWidth: '200px' }}>
+                                <label htmlFor="globalPartitionType" className="font-bold block mb-2">Global Partition Type</label>
+                                <Dropdown 
+                                    id="globalPartitionType"
+                                    value={globalPartitionType} 
+                                    options={partitionTypes}
+                                    onChange={(e) => setGlobalPartitionType(e.value)} 
+                                    placeholder="Select a Type"
+                                    className="w-full" 
+                                />
+                            </div>
+                            <div className="flex-1 min-w-0" style={{ minWidth: '150px' }}>
+                                <label htmlFor="globalDimension" className="font-bold block mb-2">Global Dimension</label>
+                                <InputNumber 
+                                    id="globalDimension"
+                                    value={globalDimension} 
+                                    onValueChange={(e) => setGlobalDimension(e.value)} 
+                                    mode="decimal" 
+                                    className="w-full"
+                                />
+                            </div>
+                            <div className="flex">
+                                <Button 
+                                    label="Apply to All" 
+                                    icon="pi pi-check-square" 
+                                    onClick={handleApplyToAll}
+                                    className="p-button-outlined"
+                                />
+                            </div>
+                        </div>
+                    </Panel>
+
                     <DataTable value={folderContent} editMode="row" dataKey="name" onRowEditComplete={onRowEditComplete}>
                         <Column field="name" header="File Name" style={{ width: '40%' }}></Column>
                         <Column field="partitionType" header="Partition Type" editor={partitionTypeEditor} style={{ width: '25%' }}></Column>
