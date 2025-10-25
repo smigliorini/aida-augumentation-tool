@@ -272,8 +272,8 @@ function FractalDimension() {
                                         value={rqSource} 
                                         onChange={(e) => setRqSource(e.value)} 
                                         options={[
-                                            { label: 'Range Query (Folder 3)', value: 'original' },
-                                            { label: 'Training Sets (Folder 4)', value: 'training_set' }
+                                            { label: 'Original Collection (3. Range Query)', value: 'original' },
+                                            { label: 'Augmented Collections (4. Training Set)', value: 'training_set' }
                                         ]} 
                                         className="w-full"
                                     />
