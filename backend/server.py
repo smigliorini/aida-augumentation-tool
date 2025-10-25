@@ -1549,6 +1549,8 @@ def get_explorer_content():
             item_full_path = os.path.join(full_path, item_name) # Path for os checks
             item_relative_path = os.path.join(relative_path, item_name).replace('\\', '/')
             if os.path.isdir(item_full_path):
+                if root_key == 'trainingSets' and re.match(r'^training_set_\d+_diff$', item_name):
+                    continue
                 content.append({'key': item_relative_path, 'label': item_name, 'data': {'path': item_relative_path}, 'type': 'folder', 'leaf': False})
             else:
                 # Get the size of the file in bytes.
