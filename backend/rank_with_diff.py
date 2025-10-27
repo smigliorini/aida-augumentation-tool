@@ -185,9 +185,9 @@ def main():
 	os.makedirs(newFolderTs, exist_ok=True)
 
 	# Generazione della cartella che conterrà le differenze
-	# print(f"<System> Generation folder 'training_set_{max_index + 1}_diff!")
-	# newFolderDiff = f"{pathFolderOutput}/training_set_{max_index + 1}_diff"
-	# os.makedirs(newFolderDiff, exist_ok=True)
+	#print(f"<System> Generation folder 'training_set_{max_index + 1}_diff!")
+	#newFolderDiff = f"{pathFolderOutput}/training_set_{max_index + 1}_diff"
+	#os.makedirs(newFolderDiff, exist_ok=True)
 	# -------------------------------------------------------------------------------------------------------------------------------------------------------
 
 	# -------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -204,57 +204,74 @@ def main():
 	# 1. Inserimento di 'nameRangeQueriesResult_ts'
 	name, ext = os.path.splitext(nameRangeQueriesResult)				# Estrazione del nome del file e la sua estensione
 	newNameTs = f"{name}_ts{ext}"										# Creazione del nuovo nome con '_ts'
-	# newNameDiff = f"{name}_diff{ext}"									# Creazione del nuovo nome con '_diff'
+	#newNameDiff = f"{name}_diff{ext}"									# Creazione del nuovo nome con '_diff'
 	newPathTs = os.path.join(newFolderTs, newNameTs)					# Percorso del nuovo file nella sottocartella (Ts)
-	# newPathDiff = os.path.join(newFolderDiff, newNameDiff)				# Percorso del nuovo file nella sottocartella (Diff)
+	#newPathDiff = os.path.join(newFolderDiff, newNameDiff)				# Percorso del nuovo file nella sottocartella (Diff)
 	main_data.drop(columns=['distribution']).to_csv(newPathTs, index=False, sep=';')	# Salvataggio file in '_ts'
-	# main_data.head(0).to_csv(newPathDiff, index=False, sep=';')							# Salvataggio file in '_diff'
+	#main_data.head(0).to_csv(newPathDiff, index=False, sep=';')							# Salvataggio file in '_diff'
 	
 	# 2. Inserimento di "nameSummary_ts.csv"
 	name, ext = os.path.splitext(nameSummary)						# Estrazione del nome del file e la sua estensione
 	newNameTs = f"{name}_ts{ext}"									# Creazione del nuovo nome con '_ts'
-	# newNameDiff = f"{name}_diff{ext}"								# Creazione del nuovo nome con '_diff'
+	#newNameDiff = f"{name}_diff{ext}"								# Creazione del nuovo nome con '_diff'
 	newPathTs = os.path.join(newFolderTs, newNameTs)				# Percorso del nuovo file nella sottocartella (Ts)
-	# newPathDiff = os.path.join(newFolderDiff, newNameDiff)			# Percorso del nuovo file nella sottocartella (Diff)
+	#newPathDiff = os.path.join(newFolderDiff, newNameDiff)			# Percorso del nuovo file nella sottocartella (Diff)
 	with open(f"{pathSummaries}/{nameSummary}", "r", encoding="utf-8") as input, \
 		 open(newPathTs, "w", encoding="utf-8") as outputTs:
-		# , \
-		#  open(newPathDiff, "w", encoding="utf-8") as outputDiff:
 		
 		for i, line in enumerate(input):
-			if i == 0:											# intestazione --> sia in Ts (che in Diff)
+			if i == 0:											# intestazione
 				outputTs.write(line)
-				# outputDiff.write(line)
+			else:												# linea dataset
+				outputTs.write(line)
+
+	"""
+	with open(f"{pathSummaries}/{nameSummary}", "r", encoding="utf-8") as input, \
+		 open(newPathTs, "w", encoding="utf-8") as outputTs, \
+		 open(newPathDiff, "w", encoding="utf-8") as outputDiff:
+		
+		for i, line in enumerate(input):
+			if i == 0:											# intestazione --> sia in Ts che in Diff
+				outputTs.write(line)
+				outputDiff.write(line)
 			elif line.strip().split(";")[0] in datasets:		# linea dataset --> solo in Ts
 				outputTs.write(line)
 			else:												# altre linee --> solo in Diff
-				# outputDiff.write(line)
-				pass # Non scrivo nulla nel file Diff
+				outputDiff.write(line)
+	"""
 
 	# 3. Inserimento di "fd_sum_....csv" e "fd_rqR_....csv" (solo se esistono)
-	if nameFD:
-		for file in nameFD:
+	valid_fd_files = [f for f in nameFD if f.strip()]  # rimuove stringhe vuote
+	if valid_fd_files:
+		for file in valid_fd_files:
 			newPathTs = os.path.join(newFolderTs, file)				# Percorso del nuovo file nella sottocartella (Ts)
-			# newPathDiff = os.path.join(newFolderDiff, file)			# Percorso del nuovo file nella sottocartella (Diff)
+			#newPathDiff = os.path.join(newFolderDiff, file)			# Percorso del nuovo file nella sottocartella (Diff)
 			with open(f"{pathFD}/{file}", "r", encoding="utf-8") as input, \
 				open(newPathTs, "w", encoding="utf-8") as outputTs:
-				# , \
-				# open(newPathDiff, "w", encoding="utf-8") as outputDiff:
 				
 				for line in input:
 					outputTs.write(line)
-					# outputDiff.write(line)
+
+			"""
+			with open(f"{pathFD}/{file}", "r", encoding="utf-8") as input, \
+				open(newPathTs, "w", encoding="utf-8") as outputTs, \
+				open(newPathDiff, "w", encoding="utf-8") as outputDiff:
+				
+				for line in input:
+					outputTs.write(line)
+					outputDiff.write(line)
+			"""
 
 	# 4. Inserimento di "bin_result_ts.csv"
 	binResult = f"bin_{nameRangeQueriesResult.replace('rqR_', '').replace('.csv', '')}"	# file di output dove salvare gli intervalli bin (bin_nameDataset)
 	newNameTs = f"{binResult}_ts.csv"													# Creazione del nuovo nome con '_ts'
-	# newNameDiff = f"{binResult}_diff.csv"												# Creazione del nuovo nome con '_diff'
+	#newNameDiff = f"{binResult}_diff.csv"												# Creazione del nuovo nome con '_diff'
 	newPathTs = os.path.join(newFolderTs, newNameTs)									# Creazione del nuovo nome con '_ts'
-	# newPathDiff = os.path.join(newFolderDiff, newNameDiff)								# Creazione del nuovo nome con '_diff'
+	#newPathDiff = os.path.join(newFolderDiff, newNameDiff)								# Creazione del nuovo nome con '_diff'
 	summary_table.columns = [col.replace(" ", "") for col in summary_table.columns]		# rimozione spazi da "summary_table"
 	summary_table["BinIndex"] = summary_table["BinIndex"].str.replace(" ", "")			# rimozione spazi dalla colonna "BinIndex"
 	summary_table.to_csv(newPathTs, sep=";", index=False, encoding="utf-8")				# Salvataggio file in '_ts'
-	# summary_table.head(0).to_csv(newPathDiff, sep=";", index=False, encoding="utf-8")	# Salvataggio file in '_diff'
+	#summary_table.head(0).to_csv(newPathDiff, sep=";", index=False, encoding="utf-8")	# Salvataggio file in '_diff'
 	# -------------------------------------------------------------------------------------------------------------------------------------------------------
 
 if __name__ == "__main__":
