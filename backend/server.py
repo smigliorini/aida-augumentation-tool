@@ -452,18 +452,9 @@ def generate_queries_backend(data):
     return {'status': 'started'}
 
 def _run_queries_from_csv_thread(data):
-    """
-    Runs the Scala RangeQueryApp using a user-provided CSV in a background thread.
-    This function handles decoding the CSV, preparing config files, executing the
-    Scala subprocess for each relevant dataset, and emitting progress updates.
-
-    Args:
-        data (dict): The original data dictionary from the 'generate_queries_from_csv' event.
-    """
     stop_monitoring_event = threading.Event()
 
     try:
-        # Decode CSV and Set Up Paths
         csv_file_b64 = data.get('csvFile')
         selected_folder_name = data.get('folder')
         
@@ -483,7 +474,6 @@ def _run_queries_from_csv_thread(data):
             socketio.emit('generate_query_error', {'error': f"No dataset files found in folder '{selected_folder_name}'."})
             return
         
-        # Save the uploaded CSV to a file
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         unique_id = uuid.uuid4().hex[:8]
         query_input_csv_filename = f"rq_input_queries_uploaded_{os.path.basename(selected_folder_name)}_{timestamp}_{unique_id}.csv"
@@ -495,7 +485,6 @@ def _run_queries_from_csv_thread(data):
         with open(query_input_csv_path, 'w', newline='', encoding='utf-8') as f:
             f.write(csv_file_string)
         
-        # Find summary file and filter datasets
         mbr_summary_file_path = find_input_params_csv(os.path.basename(selected_folder_name), PARENT_DIRS['parent_dir_input_ds'])
         if not mbr_summary_file_path or not os.path.exists(mbr_summary_file_path):
             socketio.emit('generate_query_error', {'error': f"Corresponding MBR summary file not found for '{selected_folder_name}'."})
@@ -517,62 +506,95 @@ def _run_queries_from_csv_thread(data):
             socketio.emit('generate_query_error', {'error': 'None of the datasets in the folder are mentioned in the uploaded file.'})
             return
         
-        # Process each dataset
         has_errors = False
         range_params_csv_path = os.path.join(rqsbt_project_root, "rangeParameters.csv")
-        # Aggiungi "nameSummary" alla lista dell'header
         range_params_header = ["pathDatasets", "nameDataset", "pathSummaries", "nameSummary", "pathIndexes", "pathRangeQueries", "nameRangeQueries"]
         total_datasets_to_process = len(datasets_to_process_actually)
 
-        for i, dataset_file_name in enumerate(datasets_to_process_actually):
+        # 1. Collect all dataset parameters for the multi-row CSV
+        all_dataset_rows = []
+        for dataset_file_name in datasets_to_process_actually:
             single_dataset_name_without_ext = os.path.splitext(dataset_file_name)[0]
             
-            with open(range_params_csv_path, 'w', newline='', encoding='utf-8') as csvfile:
-                writer = csv.DictWriter(csvfile, fieldnames=range_params_header, delimiter=';')
-                writer.writeheader()
-                # Aggiungi la riga "nameSummary" quando scrivi i dati
-                writer.writerow({
-                    "pathDatasets": parent_dataset_folder_path,
-                    "nameDataset": single_dataset_name_without_ext,
-                    "pathSummaries": PARENT_DIRS['parent_dir_input_ds'],
-                    "nameSummary": os.path.basename(mbr_summary_file_path),
-                    "pathIndexes": os.path.join(index_base_path, selected_folder_name, single_dataset_name_without_ext + "_spatialIndex"),
-                    "pathRangeQueries": rq_input_base_path,
-                    "nameRangeQueries": os.path.basename(query_input_csv_path)
-                })
-            
-            scala_cmd = [sbt_executable_name, "runMain RangeQueryApp"]
+            row_data = {
+                "pathDatasets": parent_dataset_folder_path,
+                "nameDataset": single_dataset_name_without_ext,
+                "pathSummaries": PARENT_DIRS['parent_dir_input_ds'],
+                "nameSummary": os.path.basename(mbr_summary_file_path),
+                "pathIndexes": os.path.join(index_base_path, selected_folder_name, single_dataset_name_without_ext + "_spatialIndex"),
+                "pathRangeQueries": rq_input_base_path,
+                "nameRangeQueries": os.path.basename(query_input_csv_path)
+            }
+            all_dataset_rows.append(row_data)
 
-            # Create a local stop event for this specific subprocess
-            single_process_stop_event = threading.Event()
-            process = subprocess.Popen(
-                scala_cmd, cwd=rqsbt_project_root,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding='utf-8', bufsize=1
-            )
+        # 2. Write all datasets to rangeParameters.csv in a single operation
+        with open(range_params_csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=range_params_header, delimiter=';')
+            writer.writeheader()
+            writer.writerows(all_dataset_rows)
             
-            # Start monitoring specifically for this process
-            socketio.start_background_task(monitor_process_and_emit_usage, process, single_process_stop_event)
-            
-            # Stream the process output without blocking
-            for line in process.stdout:
-                logging.info(f"Scala output ({single_dataset_name_without_ext}): {line.strip()}")
-                socketio.sleep(0) # Yield control to the event loop
-            
-            process.wait()
-            # Stop the monitoring for the completed process
-            single_process_stop_event.set()
-            
-            if process.returncode != 0:
-                has_errors = True
-            
-            socketio.emit('range_query_progress', {
-                'current_dataset': dataset_file_name, 'processed_count': i + 1, 
-                'total_count': total_datasets_to_process, 
-                'progress': int(((i + 1) / total_datasets_to_process) * 100)
-            })
+        # Emit starting progress
+        socketio.emit('range_query_progress', {
+            'current_dataset': "Starting analysis...", 'processed_count': 0, 
+            'total_count': total_datasets_to_process, 
+            'progress': 1
+        })
         
-        # Finalize and notify client
+        # 3. Execute the Scala App once
+        scala_cmd = [sbt_executable_name, "runMain RangeQueryApp"]
+
+        single_process_stop_event = threading.Event()
+        process = subprocess.Popen(
+            scala_cmd, cwd=rqsbt_project_root,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding='utf-8', bufsize=1
+        )
+        
+        socketio.start_background_task(monitor_process_and_emit_usage, process, single_process_stop_event)
+        
+        datasets_started = set()
+        total_datasets_to_process = len(datasets_to_process_actually)
+        
+        for line in process.stdout:
+            logging.info(f"Scala output: {line.strip()}")
+            
+            if "The dataset you want to analyze is" in line:
+                try:
+                    dataset_name_match = re.search(r"is '(.*?)'\. His geometry is", line)
+                    
+                    if dataset_name_match:
+                        dataset_name = dataset_name_match.group(1)
+                        if dataset_name not in datasets_started:
+                            datasets_started.add(dataset_name)
+                            current_processed_count = len(datasets_started)
+                            
+                            progress_percentage = int((current_processed_count / total_datasets_to_process) * 99) # Max 99%
+                            
+                            socketio.emit('range_query_progress', {
+                                'current_dataset': f"Processing: {dataset_name} ({current_processed_count}/{total_datasets_to_process})", 
+                                'processed_count': current_processed_count, 
+                                'total_count': total_datasets_to_process, 
+                                'progress': max(1, progress_percentage) 
+                            })
+                            
+                except Exception as e:
+                    logging.error(f"Error parsing Scala progress line: {e}")
+
+            socketio.sleep(0)
+                
+        process.wait()
+        single_process_stop_event.set()
+        
+        if process.returncode != 0:
+            has_errors = True
+        
+        socketio.emit('range_query_progress', {
+            'current_dataset': "All datasets processed", 
+            'processed_count': total_datasets_to_process, 
+            'total_count': total_datasets_to_process, 
+            'progress': 100
+        })
+        
         output_filename = f"rqR_{selected_folder_name}.csv"
         if has_errors:
             socketio.emit('generate_query_complete', {'status': 'partial_success', 'output_folder_name': output_filename})
@@ -1249,21 +1271,11 @@ def generate_data(data):
 
 @socketio.on('generate_data_from_csv')
 def generate_data_from_csv(data):
-    """
-    Handles the 'generate_data_from_csv' event. This function is similar to the manual one
-    but reads dataset parameters from an uploaded CSV file instead.
-
-    Args:
-        data (dict): A dictionary from the frontend containing:
-                     - csvFile: A base64-encoded string of the uploaded CSV.
-                     - folder (optional): A subfolder to save the results.
-    """
     logging.debug('Received generate_data_from_csv event')
     stop_monitoring_event = threading.Event()
     
     try:
         # --- 1. Directory Setup and CSV Decoding ---
-        # This section is identical to generate_data: create a unique session directory.
         base_path_for_generation = PARENT_DIRS['parent_dir_dataset']
         target_folder = data.get('folder')
         parent_for_new_unique_dir = os.path.join(base_path_for_generation, target_folder) if target_folder else base_path_for_generation
@@ -1271,21 +1283,64 @@ def generate_data_from_csv(data):
         main_dataset_dir = create_unique_directory(parent_for_new_unique_dir)
         generated_folder_basename = os.path.basename(main_dataset_dir)
 
-        # Decode the base64-encoded CSV file sent from the frontend.
         input_csv_filename = f"input_params_{generated_folder_basename}.csv"
         input_csv_path = os.path.join(PARENT_DIRS['parent_dir_input_ds'], input_csv_filename)
-        csv_file_content = data['csvFile'].split(',')[1] # Remove the 'data:...' prefix
+        csv_file_content = data['csvFile'].split(',')[1]
         csv_file_bytes = base64.b64decode(csv_file_content)
-        csv_file_string = csv_file_bytes.decode('utf-8')
-
-        # --- 2. Parse Uploaded CSV and Prepare Data ---
-        # Use io.StringIO to treat the decoded CSV string as an in-memory file.
+        
+        try:
+            csv_file_string = csv_file_bytes.decode('utf-8')
+        except UnicodeDecodeError:
+            csv_file_string = csv_file_bytes.decode('latin-1') # Fallback
+            
+        # --- 2. Parse Uploaded CSV and Prepare Data with Header Normalization ---
         uploaded_csv_data = []
-        csv_input_for_read = io.StringIO(csv_file_string)
-        reader = csv.DictReader(csv_input_for_read, delimiter=';')
+        delimiter = ';'
+        
+        csv_file_string = csv_file_string.lstrip('\ufeff')
+
+        # 1. Read header line and clean field names to handle whitespace/BOM issues
+        csv_input_for_header = io.StringIO(csv_file_string)
+        header_line = csv_input_for_header.readline().strip()
+        
+        if not header_line:
+            emit('generate_data_error', {'error': 'Uploaded CSV is empty or has no header.'})
+            stop_monitoring_event.set()
+            return
+
+        # Clean all field names (strip whitespace)
+        clean_header_fields = [field.strip() for field in header_line.split(delimiter)]
+        clean_header_line = delimiter.join(clean_header_fields)
+        
+        # 2. Reconstruct the clean content string
+        # Prepend the clean header and append the original data lines (skipping the original header)
+        content_lines = csv_file_string.splitlines()
+        
+        if len(content_lines) > 1:
+            clean_csv_string = clean_header_line + '\n' + '\n'.join(content_lines[1:])
+        else:
+            clean_csv_string = clean_header_line
+
+        # 3. Use DictReader with the clean content
+        csv_input_for_read = io.StringIO(clean_csv_string)
+        reader = csv.DictReader(csv_input_for_read, delimiter=delimiter) 
+
+        # Check if the 'datasetName' column exists (now checked against the clean names)
+        fieldnames = reader.fieldnames
+        if not fieldnames or 'datasetName' not in fieldnames:
+            # Fallback: se fallisce, stampa i nomi delle colonne per debug
+            logging.error(f"Failed to find 'datasetName'. Found fields: {fieldnames}")
+            emit('generate_data_error', {'error': f'Uploaded CSV must contain a "datasetName" column. Found columns: {fieldnames}'})
+            stop_monitoring_event.set()
+            return
+            
         for i, row in enumerate(reader):
-            # Assign a sequential name to each dataset defined in the CSV.
-            row['datasetName'] = f"dataset{i + 1}"
+            # Check if the datasetName is present in the row
+            if not row.get('datasetName'):
+                emit('generate_data_error', {'error': f'Row {i+2} in CSV is missing a value for "datasetName".'})
+                stop_monitoring_event.set()
+                return
+            
             uploaded_csv_data.append(row)
 
         # Write the parsed (and slightly modified) data to a new server-side summary CSV file.
@@ -1304,7 +1359,9 @@ def generate_data_from_csv(data):
             # Determine file extension based on geometry type.
             geometry = row.get('geometry', '').lower()
             file_extension = 'wkt' if geometry == 'polygon' else 'csv'
-            output_filename = os.path.join(main_dataset_dir, f"dataset{i+1}.{file_extension}")
+
+            dataset_name_from_csv = row.get('datasetName')
+            output_filename = os.path.join(main_dataset_dir, f"{dataset_name_from_csv}.{file_extension}")
             output_filenames.append(output_filename)
             
             # Calculate the affine transformation matrix from coordinates.
@@ -1339,7 +1396,6 @@ def generate_data_from_csv(data):
             commands.append(cmd)
 
         # --- 4. Execute Generation and Finalize ---
-        # This section is identical to generate_data: start monitor, run commands, and report progress.
         socketio.start_background_task(monitor_and_emit_usage, stop_monitoring_event)
 
         progress_per_dataset = 100 / len(commands) if commands else 100
@@ -1482,7 +1538,7 @@ ROOT_DIR_LABELS = {
     'parent_dir_dataset': '1. Generator', 'indexes': '2. Index',
     'range_query_results': '3. Range Query', 'trainingSets': '4. Training Sets',
     'datasetsAugmentation': '5. Augmented Datasets', 'augmentation_logs' : '5.5 Augmentation Logs',
-    'parent_dir_histogram': '6. Histogram', 'fractalDimension': '#. Fractal Dimension','parent_dir_input_ds': 'a. Input Dataset Files',
+    'parent_dir_histogram': '6. Histogram', 'fractalDimension': '#. Fractal Dimension','parent_dir_input_ds': 'a. Input Collection Files',
     'parent_dir_rq_input': 'b. Input Range Query Files', 'parent_dir_rank': 'c. Input Balacing Analysis',
 }
 
