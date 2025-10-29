@@ -1,5 +1,0 @@
-datasetName;distribution;geometry;x1;y1;x2;y2;num_features;max_seg;num_points;avg_area;avg_side_length_0;avg_side_length_1;E0;E2
-dataset1;uniform;box;1.5;3.5;8.5;9.5;500000;4;;0.1;0.2;0.5;;1.8542220302602492
-dataset2;uniform;box;5.5;7.0;12.5;13.0;200000;4;;0.09;0.3;0.3;;1.7482248343043287
-dataset3;uniform;box;9.5;3.5;16.5;9.5;300000;4;;0.02;0.1;0.2;;1.7993501266153482
-dataset4;uniform;box;5.5;10.5;12.5;16.5;50000;4;;0.15;0.5;0.3;;1.6919499277733334
