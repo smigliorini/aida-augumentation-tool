@@ -35,7 +35,7 @@ def csvReading(filePath):
 		reader = csv.reader(file, delimiter=';')		# Lettura del file con separazione dei parametri rispetto al ";"
 		header = next(reader)							# Lettura della prima riga (intestazione del file)
 		values = next(reader)							# Lettura della seconda riga (valori input)
-	
+
 	# Intestazione corretta che dovrebbe avere 'filePath'
 	expectedHeader = [
 		'pathTrainingSet',
@@ -46,7 +46,7 @@ def csvReading(filePath):
 		'pathDatasets',
 		'pathIndexes'
 	]
-	
+
 	# Controllo che il file 'filePath' sia corretto e con la giusta intestazione
 	if header != expectedHeader:
 			raise ValueError(f"<System> The file '{filePath}' is incorrect. Invalid header!")
@@ -98,17 +98,17 @@ def validate_input(user_input):
 	# L'input inserito deve avere almeno 4 campi minimi
 	if len(parts) < 4:
 		raise ValueError("Input must be in the format \"bin_num num_queries distribution augmentation_technique1 [augmentation_technique2] [augmentation_technique3]\"...")
-	
+
 	# Analisi di "bin_num" (controllo che il campo inizi con bin e che dal terzo carattere ci sia un numero):
 	bin_num = parts[0]
 	if not bin_num.startswith("bin") or not bin_num[3:].isdigit():
 		raise ValueError("The bin number must start with 'bin' followed by a number (e.g., 'bin0')...")
-	
+
 	# Analisi di "num_queries" (controllo che il campo sia un numero):
 	num_queries = parts[1]
 	if not num_queries.isdigit():
 		raise ValueError("The number of queries must be an integer...")
-	
+
 	# Analisi di "distribution" (controllo che il campo sia una distribuzione valida tra quelle possibili):
 	distribution = parts[2]
 	if distribution not in ['uniform', 'diagonal', 'gaussian', 'sierpinski', 'bit', 'parcel']:
@@ -119,7 +119,7 @@ def validate_input(user_input):
 	for technique in augmentation_techniques:
 		if technique not in ['rotation', 'noise', 'merge']:
 			raise ValueError("Invalid augmentation technique. Allowed values are 'rotation', 'noise' or 'merge'...")
-		
+
 	# Ritorno i campi convalidati relativi all'iesimo input inserito dall'utente
 	return bin_num, int(num_queries), distribution, augmentation_techniques
 
@@ -134,7 +134,7 @@ def update_bin(bin_label, num_queries, path_nameBin):
 	df_bin.to_csv(path_nameBin, index=False, sep=';')							# Aggiornamento nel file di "path_nameBin"
 
 # FUNZIONE "get_coordinates":
-# Funzione usata per ricercare e restituire le massime coordinate di "dataset_name" 
+# Funzione usata per ricercare e restituire le massime coordinate di "dataset_name"
 # Input: dataset_summary_file --> percorso del file ".csv" contenente il riepilogo dei datasets;
 # 		 dataset_name --> nome del dataset di cui si vogliono ottenere le coordinate.
 # Output: x1, y1, x2, y2 --> massime coordinate del dataset in questione.
@@ -235,7 +235,7 @@ def rotate_boxes(df, cx, cy, angle):
 	xmax = df['xmax'].values	# array con tutti gli xmax delle box del dataset
 	ymax = df['ymax'].values	# array con tutti gli ymax delle box del dataset
 
-	# Costruzione dei punti che corrispondono ai quattro angoli delle box 
+	# Costruzione dei punti che corrispondono ai quattro angoli delle box
 	points = np.array([
 		[xmin, ymin],			# point[0] --> array con tutti gli xmin e ymin delle box del dataset
 		[xmax, ymin],			# punto[1] --> array con tutti gli xmax e ymin delle box del dataset
@@ -253,7 +253,7 @@ def rotate_boxes(df, cx, cy, angle):
 	# con rotated_xN e rotated_yN array con le coordinate ruotate di quel vertice per tutti i box
 
 	# Stack and calculate new bounding boxes
-	all_x_coords = np.vstack([rotated_points[i][0] for i in range(4)])		# prende le x dei nuovi vertici ruotati 
+	all_x_coords = np.vstack([rotated_points[i][0] for i in range(4)])		# prende le x dei nuovi vertici ruotati
 	all_y_coords = np.vstack([rotated_points[i][1] for i in range(4)])		# prende le y dei nuovi vertici ruotati
 
 	new_xmin = np.min(all_x_coords, axis=0)			# estrazione di xmin nuova per tutti i box
@@ -271,7 +271,7 @@ def rotate_boxes(df, cx, cy, angle):
 # Output: filtered_df --> geometrie ruotate appartenenti all'i-esima partizione;
 # 		  removed_count --> eventuali geometrie (boxes) rimosse.
 def rotate_partition(input_csv, angle_degrees, space_bounds=(0, 0, 10, 10)):
-	
+
 	angle_radians = math.radians(angle_degrees)														# conversione dell'angolo in radianti
 	cx, cy = (space_bounds[2] - space_bounds[0]) / 2, (space_bounds[3] - space_bounds[1]) / 2		# calcolo del centro dello spazio
 	df = pd.read_csv(input_csv, header=None, names=['xmin', 'ymin', 'xmax', 'ymax'])				# lettura del file ".csv" senza intestazione
@@ -324,7 +324,7 @@ def rotate_dataset(dataset_name, pathIndexes, output_ds, degree):
 	with ProcessPoolExecutor(max_workers=4) as executor:
 		futures = {}																					# dizionario per mappare la 'future' al nome della partizione
 		for part_file in partitions:																	# per ogni partizione presente in 'partitions'...
-			path_partition = os.path.join(partitions_folder, part_file)									# percorso dell'i-esima partizione						
+			path_partition = os.path.join(partitions_folder, part_file)									# percorso dell'i-esima partizione
 			futures[executor.submit(rotate_partition, path_partition, float(degree))] = part_file		# lancio delle rotazioni in parallelo
 
 		for future in as_completed(futures):															# iterazione sulle "future" che sono terminate
@@ -335,7 +335,7 @@ def rotate_dataset(dataset_name, pathIndexes, output_ds, degree):
 				output.append(df_rotate)																# aggiunta delle geometrie dell'i-esima partizione ruotata
 			except Exception as e:
 				print(f"<System> Failed rotating {part_file}: {e}")
-	
+
 	final_df = pd.concat(output, ignore_index=False)													# unione di tutte le geometrie ruotate da inserire nel nuovo dataset
 	os.makedirs(os.path.dirname(output_ds), exist_ok=True)												# generazione della cartella corrispondente
 	final_df.to_csv(output_ds, index=False, header=False, quoting=csv.QUOTE_NONE)						# scrittura del file
@@ -384,7 +384,7 @@ def get_coordinates_rq(rq_result_file, index):
 	return x1, y1, x2, y2
 
 # FUNZIONE "get_features":
-# Funzione usata per ricercare e restituire il numero di geometrie presenti in "dataset_name" 
+# Funzione usata per ricercare e restituire il numero di geometrie presenti in "dataset_name"
 # Input: dataset_summary_file --> percorso del file ".csv" contenente il riepilogo dei datasets;
 # 		 dataset_name --> nome del dataset di cui si vogliono ottenere le coordinate.
 # Output: n --> numero di geometrie nel dataset in questione.
@@ -415,9 +415,9 @@ def rotate_window(xmin, ymin, xmax, ymax, angle_degrees):
 
 	# Rotazione dei punti
 	rotated_points = [rotate_points(cx, cy, angle_radians, points[i][0], points[i][1]) for i in range(4)]
-	
+
 	# Stack and calculate new bounding boxes
-	all_x_coords = np.vstack([rotated_points[i][0] for i in range(4)])		# prende le x dei nuovi vertici ruotati 
+	all_x_coords = np.vstack([rotated_points[i][0] for i in range(4)])		# prende le x dei nuovi vertici ruotati
 	all_y_coords = np.vstack([rotated_points[i][1] for i in range(4)])		# prende le y dei nuovi vertici ruotati
 
 	new_xmin = np.min(all_x_coords)			# estrazione di xmin nuova
@@ -428,7 +428,7 @@ def rotate_window(xmin, ymin, xmax, ymax, angle_degrees):
 	return new_xmin, new_ymin, new_xmax, new_ymax
 
 # FUNZIONE "update_dataset_summary":
-# Funzione ustata 
+# Funzione ustata
 # Input: original_dataset_name --> nome del dataset di partenza;
 # 		 rotated_dataset_name --> nome del nuovo dataset ruotato;
 # 		 x1, y1, x2, y2 --> nuove coordinate della finestra del dataset ruotate;
@@ -438,7 +438,7 @@ def rotate_window(xmin, ymin, xmax, ymax, angle_degrees):
 def update_dataset_summary(original_dataset_name, rotated_dataset_name, x1, y1, x2, y2, number, path_nameSummary, path_nameNewDatasets):
 	df_summary = pd.read_csv(path_nameSummary, delimiter=';')			# Lettura dei datasets presenti
 	df_newDatasets = pd.read_csv(path_nameNewDatasets, delimiter=';')	# Lettura dei datasets nuovi ma già generati
-	
+
 	if rotated_dataset_name in df_summary['datasetName'].values:		# Se il dataset ruotato è già presente nella lista, lo aggiorno con le nuove informazioni. Altrimenti ...
 		df_summary.loc[df_summary['datasetName'] == rotated_dataset_name, ['x1', 'y1', 'x2', 'y2', 'num_features']] = [x1, y1, x2, y2, number]
 		df_newDatasets.loc[df_newDatasets['datasetName'] == rotated_dataset_name, ['x1', 'y1', 'x2', 'y2', 'num_features']] = [x1, y1, x2, y2, number]
@@ -495,7 +495,7 @@ def update_range_query_file(index, rotated_dataset_name, minX, minY, maxX, maxY,
 
 	df_range_query = pd.concat([df_range_query, pd.DataFrame([new_row])], ignore_index=True)	# unisco la riga alle altre righe presenti in "path_nameRangeQueriesResult"
 	df_range_query.to_csv(path_nameRangeQueriesResult, index=False, sep=';')					# aggiornamento nel file di "path_nameRangeQueriesResult"
-	
+
 # FUNZIONE "update_range_query_file":
 # Funzione usata per aggiornare "path_nameRangeQueriesResult" - (no cardinality)
 # Input: index --> indice della riga usato per selezionare la riga corretta in "rq_result_file";
@@ -524,7 +524,7 @@ def update_range_query_file_label(index, rotated_dataset_name, minX, minY, maxX,
 		'cardinality': original_row['cardinality'],
 		'executionTime': original_row['executionTime'],
 		'mbrTests': original_row['mbrTests'],
-		last_column_name: label 
+		last_column_name: label
 	}
 
 	df_range_query = pd.concat([df_range_query, pd.DataFrame([new_row])], ignore_index=True)	# unisco la riga alle altre righe presenti in "path_nameRangeQueriesResult"
@@ -570,11 +570,11 @@ def update_dataset_param(dataset_name, new_dataset_name, num_features, path_name
 	df_newDatasets.to_csv(path_nameNewDatasets, index=False, sep=';')											# aggiornamento nel file di "path_nameNewDatasets"
 
 # FUNZIONE "update_range_query_param":
-# 
-# Input: index --> 
+#
+# Input: index -->
 # 		 new_dataset_name --> nome del nuovo dataset generato
-# 		 cardinality --> 
-# 		 label --> 
+# 		 cardinality -->
+# 		 label -->
 # 		 path_nameNewDatasets --> percorso contenente i nuovi datasets generati
 def update_range_query_param2(index, new_dataset_name, cardinality, label, path_nameRangeQueriesResult):
 	df_range_query = pd.read_csv(path_nameRangeQueriesResult, delimiter=';')							# lettura del file con le range queries già esistenti
@@ -599,7 +599,7 @@ def update_range_query_param2(index, new_dataset_name, cardinality, label, path_
 		'cardinality': cardinality,
 		'executionTime': original_row['executionTime'],
 		'mbrTests': original_row['mbrTests'],
-		last_column_name: label 
+		last_column_name: label
 	}
 
 	df_range_query = pd.concat([df_range_query, pd.DataFrame([new_row])], ignore_index=True)			# unisco la riga alle altre righe presenti in "path_nameRangeQueriesResult"
@@ -681,7 +681,7 @@ def generate_boxes_parallel(disjoint_df, b, h, num_boxes):
 			tasks = [ (row, b, h) for _, row in disjoint_df.sample(n=remaining, replace=True).iterrows() ]		# argomento da passare alla funzione che parallelizza
 			new = pool.map(generate_one_box, tasks)																# restituzione della box generata
 			results.update([r for r in new if r is not None])													# aggiungo solo le geometrie valide
-	
+
 	return list(results)
 
 def generate_one_box(args):
@@ -699,14 +699,14 @@ def remove_boxes_parallel(disjoint_name, intersecting_name, output_path, num_box
 	base = num_boxes // len(disjoint_files)					# numero di geometrie da rimuovere per ciascuna partizione (parte intera)
 	extra = num_boxes % len(disjoint_files)					# geometrie da rimuovere e distribuire tra alcune partizioni (parte decimale)
 	remove_plan = {p: base for p in disjoint_files}			# assegnazione a ciascuna partizione del numero di geometrie da rimuovere
-	for p in random.sample(disjoint_files, extra):		# aggiunta solo per alcune partizioni di una geometria in più da rimuovere 
+	for p in random.sample(disjoint_files, extra):		# aggiunta solo per alcune partizioni di una geometria in più da rimuovere
 		remove_plan[p] += 1
-	
+
 	# preparazione delle tasks e invio di quest'ultime per la rimozione delle geometrie
 	tasks = [(f, remove_plan[f], pathIndexes) for f in disjoint_files]
 	with Pool(cpu_count()) as pool:
 		results = pool.starmap(process_partition, tasks)
-		
+
 	# analizzo il ritorno dei risultati
 	kept_dfs = []											# geometrie rimaste
 	not_removed = 0											# numero di geometrie non rimosse ancora
@@ -719,21 +719,21 @@ def remove_boxes_parallel(disjoint_name, intersecting_name, output_path, num_box
 	if not_removed > 0:
 		drop_idx = random.sample(range(len(final_df)), not_removed)		# scelgo random le geometrie da rimuovere
 		final_df = final_df.drop(drop_idx)								# rimozione delle geometrie
-	
+
 	# leggo le geometrie presenti nelle partizioni che non intersecano la finestra di query
 	intersecting_dfs = []
 	for f in intersecting_files:
 		df_int = pd.read_csv(os.path.join(pathIndexes, f), header=None)
 		intersecting_dfs.append(df_int)
 
-	final_df = pd.concat([final_df] + intersecting_dfs, ignore_index=True)				# concateno lon i risultati dopo la rimozione delle geometrie	
+	final_df = pd.concat([final_df] + intersecting_dfs, ignore_index=True)				# concateno lon i risultati dopo la rimozione delle geometrie
 	final_df.to_csv(output_path, header=False, index=False, quoting=csv.QUOTE_NONE)		# salvataggio del dataset finale
 
 def process_partition(file_path, to_remove, pathIndexes):
 	# Se non ci sono geometrie da rimuovere, ritorno l'intera partizione
 	if to_remove <= 0:
 		return pd.read_csv(os.path.join(pathIndexes, file_path), header=None), 0
-    
+
 	df = pd.read_csv(os.path.join(pathIndexes, file_path), header=None)		# lettura delle geometrie presenti nella partizione
 	remove_count = min(to_remove, len(df))									# se ci sono meno geometrie rispetto al numero da rimuovere, rimuovo quelle possibili
 	drop_idx = random.sample(range(len(df)), remove_count)					# scelgo random le geometrie da rimuovere
@@ -775,9 +775,9 @@ def get_dataset_info(dataset_summary_file, dataset_name):
 def count_lines_efficient(file_path):
 	with open(file_path, 'r') as f:
 		return sum(1 for line in f)
-	
+
 # FUNZIONE "generate_random_box":
-# 
+#
 # Input: mbr_dataset --> partizione selezionata;
 # 		 w --> lunghezza della box
 # 		 h --> altezza della box
@@ -845,7 +845,7 @@ def generate_random_box_no_index(mbr_dataset, w, h, query_mbr):
 	box_width = float(w)											# conversione in float della lunghezza
 	box_height = float(h)											# conversione in float dell'altezza
 	minX_q, minY_q, maxX_q, maxY_q = query_mbr						# dimensione della finestra di query
-	
+
 	test = 30														# numero di tentativi massimi di generazione della geometria
 	while test > 0:
 		test -= 1
@@ -883,7 +883,7 @@ def verify_merge(merge_data, datasetName, summary_data):
 			for j in range(i + 1, len(sampled_groups)):								# indice che indicherà i dataset successivi da confrontare con il primo
 				dataset_j = sampled_groups.iloc[j]["datasetName"]					# nome del secondo dataset legato alla seconda range quey
 				window_j = summary_data.loc[summary_data['datasetName'] == dataset_j, ['x1', 'y1', 'x2', 'y2']].iloc[0].tolist()	# finsetra del secondo dataset
-				
+
 				# verifico se le due finestre sono disgiunte o meno
 				if are_disjoint(window_i, window_j):
 					result.append((dataset_i, dataset_j, 0, 0))
@@ -897,7 +897,7 @@ def verify_merge(merge_data, datasetName, summary_data):
 def are_disjoint(mbr1, mbr2):
 	xmin1, ymin1, xmax1, ymax1 = mbr1		# coordinate finestra dataset_1
 	xmin2, ymin2, xmax2, ymax2 = mbr2		# coordinate finestra dataset_2
-	
+
 	# verifica se si sovrappongono completamente le due finestre di dataset
 	if xmax1 < xmin2:						# dataset_1 è a sinistra del dataset_2
 		return True
@@ -907,7 +907,7 @@ def are_disjoint(mbr1, mbr2):
 		return True
 	if ymin1 > ymax2:						# dataset_1 è sopra al dataset_2
 		return True
-	
+
 	return False							# le due finestre dei dataset si sovrappongono
 
 # FUNZIONE "extract_numbers":
@@ -981,7 +981,7 @@ def main():
 		pathIndexes				# percorso contenente gli indici spaziali
 	) = csvReading(fileInput)
 	# ------------------------------------------------------------------------------------------------------------------------------------------------------
-	
+
 	# ------------------------------------------------------------------------------------------------------------------------------------------------------
 	# CONTROLLO CHE I DATASETS PRESENTI IN "nameSummary" CONTENGANO SOLO BOX:
 	# Al momento, l'augmentation funziona solo con datasets contenenti geometrie di tipo box. In caso si debba lavorare con
@@ -1028,7 +1028,7 @@ def main():
 
 	# caricamento dei file
 	bin_result, summary_data, main_data = reload(path_nameBin, path_nameSummary, path_nameRangeQueriesResult)
- 
+
 	# Identifico il parametro categorizzato in analisi (lo prendo dall'ultima colonna di "nameRangeQueriesResult")
 	param_to_categorize = main_data.columns[-2].rsplit('_', 1)[0]
 
@@ -1037,22 +1037,22 @@ def main():
 	with open(path_nameSummary, mode="r", newline="", encoding="utf-8") as file:
 		reader = csv.reader(file, delimiter=";")
 		next(reader)														# Salta header
-    
+
 		for row in reader:													# Cicolo su ogni riga
 			if row:															# Evita eventuali righe vuote
 				dataset = row[0].strip()									# Divide la riga in colonne e prende solo il valore della prima
 				if "_" not in dataset and dataset not in datasetName:		# Aggiungi solo se non contiene "_" e non è già presente nella lista
 					datasetName.append(dataset)								# Aggiunta del dataset nella lista
-	
+
 	# Idemtifico eventuali dataset che possono essere uniti con la tecnica del merge
 	merge_table = verify_merge(main_data, datasetName, summary_data)
-	
+
 	# Definizione delle "labels" e delle "num_queries" per ciascuna "labels" tramite l'uso della funzione "create_intervals"
 	# labels --> ['0-1', '1-2', '2-3', '3-4', '4-5', '5-6']
 	# num_queries --> [3, 5, 2, 8, 11, 7]
 	print(f"<System> Generation of Bins for the parameter '{param_to_categorize}'!")
 	labels, num_queries = create_intervals(bin_result)
-	
+
 	# Stampa degli intervalli Bins come segue
 	# bin0 --> 0-1 | 3
 	# bin1 --> 1-2 | 5
@@ -1061,7 +1061,7 @@ def main():
 		print(f"         bin{index:<2} --> {label} | {queries}")
 	print()
 	# ------------------------------------------------------------------------------------------------------------------------------------------------------
-	
+
 	# ------------------------------------------------------------------------------------------------------------------------------------------------------
 	# VALIDAZIONE DEGLI INPUT INSERITI DALL'UTENTE:
 	# Controllo degli input inseriti dall'utente
@@ -1072,7 +1072,7 @@ def main():
 	if not os.path.exists(path_nameInputs):							# Verifica esistenza del file
 		raise ValueError(f"<System> ERROR! The file '{nameInputs}' does not exist in '{pathTrainingSet}'...")
 
-	
+
 	with open(path_nameInputs, 'r') as file:						# Tentativo di apertura in sola lettura del file "file_path"
 		for line in file:											# Cicla su ogni riga del file "file_path"
 			user_input = line.strip()								# Salvo il contenuto della riga eliminando spazi e caratteri speciali (come "\n")
@@ -1092,7 +1092,7 @@ def main():
 		print(f"         {bin_num:<6} {num_queries:<8} {distribution:<12} {', '.join(augmentation_techniques)}")
 	print()
 	# ------------------------------------------------------------------------------------------------------------------------------------------------------
-	
+
 	# ------------------------------------------------------------------------------------------------------------------------------------------------------
 	# ANALISI DI CIASCUN INPUT INSERITO DALL'UTENTE:
 	# Per ogni riga di input inserita in "inputs", viene fatta l'analisi di augmentation
@@ -1107,7 +1107,7 @@ def main():
 		# Uso "bin_index" per recuperare l'intervallo Bin corrispondente (2 --> '2-3')
 		bin_label = labels[bin_index]
 
-		# Seleziono da "main_data" tutte le righe che hanno come intervallo "bin_label" quello selezionato ('2-3') e che trattino "datasetName" 
+		# Seleziono da "main_data" tutte le righe che hanno come intervallo "bin_label" quello selezionato ('2-3') e che trattino "datasetName"
 		bin_data = main_data[(main_data[f'{param_to_categorize}_class'] == bin_label) & (main_data['datasetName'].isin(datasetName))]
 
 		# Seleziono da "main_data" tutte le righe che hanno "bin_label" e "distribution" selezionati ('2-3' e 'uniform') - queries incrementate e queries non incremeeeentate
@@ -1118,7 +1118,7 @@ def main():
 		# CASO SPECIALE: il numero di queries presente nel bin è pari a 0 - incremento di una queries
 		if (len(dist_data) == 0):
 			print("<System> Special case: this bin no has queries!")
-			
+
 			print(f"<System> Starting {chosen_technique}...")
 			try:
 				# SELEZIONE DELLA QUERY DA SFRUTTARE PER LA TECNICA DI AUGMENTATION:
@@ -1126,12 +1126,12 @@ def main():
 
 				# Filtraggio delle Range Queries con "distribution", "cardinality" diversa da zero, che NON appartengano al "bin_label" attuale  e correlate a "datasetName"
 				noise_data = main_data[
-					(main_data['distribution'] == distribution) &  
+					(main_data['distribution'] == distribution) &
 					(main_data['cardinality'] != 0.0) &
 					(main_data['cardinality_class'] != bin_label) &
 					(main_data['datasetName'].isin(datasetName))
 				]
-						
+
 				noise_data = noise_data.sort_values(by='cardinality', ascending=True)				# Ordinamento dei dati trovati per "cardinality" crescente (da più piccolo a più grande)
 				lower_bound, upper_bound = map(float, bin_label.split('-'))							# Estrazione dei due estremi del bin
 
@@ -1144,7 +1144,7 @@ def main():
 
 				selected_row = noise_data.iloc[0]													# seleziono la prima riga, quella più vicina all'intervallo "bin_label"
 
-				if 
+				if
 
 				else:
 							print("<System> No appropriate noise data found.")
@@ -1160,7 +1160,7 @@ def main():
 				if os.path.exists(output_path):
 					os.remove(output_path)
 					print(f"<System> Removed file at {output_path} due to error.")
-												
+
 """
 
 
@@ -1179,7 +1179,7 @@ def main():
 			print("----------------------------------------------------------------------------------------------------")
 			print(f"PROCESSING INPUT {count}! Required for this bin {num_queries} queries with {distribution} distribution.")
 			print(f"This bin requires deleting {len(dist_data_in) - num_queries} queries.")
-			
+
 			# divisione tra queries che devono rimanere e queries che devono essere eliminate
 			to_remove = dist_data_in.tail(len(dist_data_in) - num_queries)								# prende le ultime "len(dist_data_in) - num_queries" queries che sono in eccesso, da rimuovere
 			main_data = main_data.drop(to_remove.index)													# rimozione delle righe in eccesso da "main_data"
@@ -1205,7 +1205,7 @@ def main():
 			print("----------------------------------------------------------------------------------------------------")
 			print(f"PROCESSING INPUT {count + 1}! Required for this bin {num_queries} queries with {distribution} distribution.")
 			print(f"This bin requires augmentation of {num_queries - len(dist_data_in)} queries.")
-			
+
 			path_nameNewDatasets = os.path.join(pathTrainingSet, 'new_datasets.csv')								# generazione del path per il file "new_datasets.csv"
 			if not os.path.isfile(path_nameNewDatasets):
 				with open(path_nameSummary, 'r') as file_R, open(path_nameNewDatasets, 'w') as file_W:				# apertura dei file "path_nameSummary" e "path_nameNewDatasets"
@@ -1216,12 +1216,12 @@ def main():
 			num_queries = num_queries - named_distribution_count		# calcolo il numero di queries che dovranno essere inserite
 			num_queries_inserted = 0									# variabile contatore per sapere il numero di queries nuove inserite
 
-			# Ciclo, potenzialmente infinito, che verrà interrotto da "break" quando saranno stati generati abbastanza dati 
+			# Ciclo, potenzialmente infinito, che verrà interrotto da "break" quando saranno stati generati abbastanza dati
 			while True:
 				remaining = num_queries - num_queries_inserted									# calcolo quante queries devo ancora essere generare
 				print()
 				print(f"<System> Generating the number query {num_queries_inserted + 1}:")
-				
+
 				if len(dist_data) != 0:
 					row = dist_data.sample(n=1).iloc[0]		# estrazione di una riga casuale da "dist_data" che sarà la base su cui applicare la tecnica di "augmentation"
 					file_index = row.name					# salvataggio dell'indice della riga in questione
@@ -1229,7 +1229,7 @@ def main():
 
 				# definizione della cartella dove caricare i datasets generati dalle tecniche di augmentation! Se la cartella non esiste, la creo
 				folder_output = os.path.join("datasetsAugmentation", '/'.join(pathTrainingSet.split('/')[1:]))
-				if not os.path.exists(folder_output):		
+				if not os.path.exists(folder_output):
 					os.makedirs(folder_output)
 
 				# Le tecniche di augmentation vengono selezionate in base a probabilità pesate
@@ -1241,17 +1241,21 @@ def main():
 					}
 				elif len(datasetName) == 1:		# ... se ho solo un dataset, non ha senso fare il "merge" (per usare il "merge", c'è bisogno di almeno due datasets)
 					probabilities = {
-						"rotation": 0.6,	# 60% chance
-						"noise": 0.4,		# 40% chance
+						#"rotation": 0.6,	# 60% chance
+						#"noise": 0.4,		# 40% chance
+						"rotation": 0.1,
+						"noise": 0.9,
 						"merge": 0			# 0% chance
 					}
 				else:
 					probabilities = {
-						"rotation": 0.5,	# 50% chance
-						"noise": 0.4,		# 40% chance
+						#"rotation": 0.5,	# 50% chance
+						#"noise": 0.4,		# 40% chance
+						"rotation": 0.1,
+						"noise": 0.8,
 						"merge": 0.1		# 10% chance
 					}
-				
+
 				"""
 				# Si può modificare dinamicamente le probabilità in base al parametro in analisi, ad esempio evitando il "merge" per la "cardinality"
 				if param_to_categorize == "cardinality":
@@ -1263,7 +1267,7 @@ def main():
 				chosen_technique = random.choices(list(probabilities.keys()), weights=list(probabilities.values()))[0]
 				#chosen_technique = "noise"
 				print(f"<System> The technique used for augmentation is '{chosen_technique}'.")
-				
+
 				# -------------------------------------------------------------------------------------------------------------------------------------------
 				# PRIMA TECNICA DI AUGMENTATION - "ROTATION"
 				if chosen_technique == 'rotation':
@@ -1282,11 +1286,11 @@ def main():
 							if not os.path.exists(output_ds):														# esco dal ciclo solo se ho generato un angolo già esistente
 								break
 							print(f"<System> Skipped! Rotated dataset file '{dataset_name}_rotated_{degree_str}' already exists.")
-							
+
 						if tent != 21:
 							rotated_dataset_name = new_dataset_name.rsplit('.', 1)[0]							# nome del dataset ruotato di "degree" senza estensione
 							output_ds, nrem = rotate_dataset(dataset_name, pathIndexes, output_ds, degree)		# rotazione dataset - restituisce l'eventuale numero di geometrie rimosse
-							
+
 							x1, y1, x2, y2 = get_coordinates(path_nameSummary, dataset_name)					# funzione usata per ricavare le massime coordinate del dataset in questione
 							nf = get_features(path_nameSummary, dataset_name)									# funzione usata per ricavare il numero di geometrie nel dataset in questione
 							res = float(nf) - float(nrem)														# numero di geometrie effettive nel nuovo dataset generato
@@ -1299,19 +1303,19 @@ def main():
 							print(f"<System> Rotated Range Query by {degree}")
 							minX, minY, maxX, maxY = get_coordinates_rq(path_nameRangeQueriesResult, file_index)					# ricerca delle coordinate della finestra di range query da ruotare
 							rotated_x1r, rotated_y1r, rotated_x2r, rotated_y2r = rotate_window(minX, minY, maxX, maxY, degree)		# rotazione della finestra di range query
-							
+
 							# Aggiornamento del file "path_nameRangeQueriesResul" con le nuove queries
 							if param_to_categorize == "cardinality":
 								update_range_query_file(file_index, rotated_dataset_name, rotated_x1r, rotated_y1r, rotated_x2r, rotated_y2r, path_nameRangeQueriesResult)
 							else:
-								update_range_query_file_label(file_index, rotated_dataset_name, rotated_x1r, rotated_y1r, rotated_x2r, rotated_y2r, bin_label, path_nameRangeQueriesResult)						
+								update_range_query_file_label(file_index, rotated_dataset_name, rotated_x1r, rotated_y1r, rotated_x2r, rotated_y2r, bin_label, path_nameRangeQueriesResult)
 							print("<System> The 'rotation' operation for the following query has finished")
 
 					except Exception as e:
 						print(f"<System> An error occurred: {e}")
 						num_queries_inserted -= 1
 				# -------------------------------------------------------------------------------------------------------------------------------------------
-				
+
 				# -------------------------------------------------------------------------------------------------------------------------------------------
 				# SECONDA TECNICA DI AUGMENTATION - "NOISE"
 				elif chosen_technique == 'noise':
@@ -1320,10 +1324,10 @@ def main():
 						# SELEZIONE DELLA QUERY DA SFRUTTARE PER LA TECNICA DI AUGMENTATION:
 						# Cardinality - Seleziono la query che sia fuori a "bin_label" ma che sia il più vicino possibile a questo intervallo
 						if param_to_categorize == "cardinality":
-							
+
 							# Filtraggio delle Range Queries con "distribution", "cardinality" diversa da zero, che NON appartengano al "bin_label" attuale  e correlate a "datasetName"
 							noise_data = main_data[
-								(main_data['distribution'] == distribution) &  
+								(main_data['distribution'] == distribution) &
 								(main_data['cardinality'] != 0.0) &
 								(main_data['cardinality_class'] != bin_label) &
 								(main_data['datasetName'].isin(datasetName))
@@ -1331,7 +1335,7 @@ def main():
 
 							noise_data = noise_data.sort_values(by='cardinality', ascending=True)				# Ordinamento dei dati trovati per "cardinality" crescente (da più piccolo a più grande)
 							lower_bound, upper_bound = map(float, bin_label.split('-'))							# Estrazione dei due estremi del bin
-							
+
 							# Calcolo di quanto OGNI query sia lontana dagli estremi inferiore e superiore del "bin_label" in analisi
 							noise_data['lower_diff'] = abs(noise_data['cardinality'] - lower_bound)				# estremo inferiore --> |cardinality - lower_bound|
 							noise_data['upper_diff'] = abs(noise_data['cardinality'] - upper_bound)				# estremo superiore --> |cardinality - upper_bound|
@@ -1340,7 +1344,7 @@ def main():
 							noise_data = noise_data.sort_values(by='min_diff')									# riordino in base alla differenza più piccola
 
 							selected_row = noise_data.iloc[0]													# seleziono la prima riga, quella più vicina all'intervallo "bin_label"
-						
+
 						# No Cardinality - seleziono una qualsiasi tra le queries appartenenti a "bin_label"
 						else:
 							existing_column = f"{param_to_categorize}_class"		# variabile di supporto per selezionare la colonna corretta con le label
@@ -1351,13 +1355,13 @@ def main():
 								(main_data[existing_column] == bin_label) &
 								(main_data['datasetName'].isin(datasetName))
 							]
-															
+
 							selected_row = noise_data.sample(n=1).iloc[0]			# seleziono una singola query casuale da "noise_data"
-							
+
 						if not noise_data.empty:
 							file_index = selected_row.name															# seleziono l'indice della query selezionata (diverso dal numero della query)
 							selected_cardinality = selected_row['cardinality']										# seleziono la cardinalità della query selezionata (la più piccola di quel bin per costruzione di "selected_row")
-							dataset_name = selected_row['datasetName']												# seleziono il nome relativo al dataset su cui è stata applicata la query selezionata 
+							dataset_name = selected_row['datasetName']												# seleziono il nome relativo al dataset su cui è stata applicata la query selezionata
 							file_path = os.path.join(pathIndexes,f'{dataset_name}_spatialIndex/_master.rsgrove')	# caricamento cartella contenente la tabella ricapitolativa sull'indice spaziale correlato al dataset in questione
 
 							# controllo esistenza dell'indice spaziale
@@ -1365,15 +1369,15 @@ def main():
 								df = pd.read_csv(file_path)											# tentativo di apertura di "file_path"
 							except FileNotFoundError:												# se il file non viene aperto correttamente, stampa messaggio di errore
 								print("File not found. Exiting.")
-							
+
 							df = pd.read_csv(file_path, delim_whitespace=True, skiprows=0)			# lettura della tabella ricapitolativa dell'indice spaziale
 							coordinates_df = df[['xmin', 'ymin', 'xmax', 'ymax']]					# estrazione delle coordinate delle finestre di ciascuna partizione del dataset in questione
-							name_df = df[['ID']]													# estrazione dei nomi di ciascuna partizione del dataset in questione														
+							name_df = df[['ID']]													# estrazione dei nomi di ciascuna partizione del dataset in questione
 							minX = selected_row['minX']												# estrazione di minX della finestra correlata alla range query scelta
 							minY = selected_row['minY']												# estrazione di minY della finestra correlata alla range query scelta
 							maxX = selected_row['maxX']												# estrazione di maxX della finestra correlata alla range query scelta
 							maxY = selected_row['maxY']												# estrazione di maxY della finestra correlata alla range query scelta
-							
+
 							# mantengo solo le partizioni che sono disgiunte rispetto la range query selezionata (che non intersecano la finestra di query selezionata)
 							rtree_idx = build_rtree_from_rsgrove(coordinates_df)																		# indice delle partizioni "itelligente" - finestre partizioni
 							rtree_idx_name = build_rtree_from_rsgrove(coordinates_df)																	# indice delle partizioni "itelligente" - nomi partizioni
@@ -1397,29 +1401,29 @@ def main():
 								content = input_file.read()												# lettura e caricamento in "content" del dataset in analisi
 							with open(output_path, 'w') as output_file:									# apertura del file dove scrivere il nuovo dataset
 								output_file.write(content)												# copia del dataset in analisi ("content") nel file che conterrà il nuovo dataset
-							
+
 							# capisco se dovrò aumentare o diminuire la cardinalità
 							if param_to_categorize == "cardinality" or len(dist_data) == 0:
 								if selected_cardinality > float(bin_label.split("-")[0]):				# in selected_cardinality ho una cardinalità o subito sopra o subito sotto al bin in analisi
 									operation = "decrease"												# ... se subito SOPRA devo DECREMENTARE
 								else:
 									operation = "increase"												# ... se subito SOTTO devo INCFEMENTARE
-							
+
 							# ricerca di informazioni sul dataset selezionato (b = media lato 0, h = media lato 1, num_features = geometrie)
 							b, h, num_features = get_dataset_info(path_nameSummary, dataset_name)
 							count_geom_tot = count_lines_efficient(output_path)							# numero di geometrie nel dataset
 							count_inside = count_geom_tot * selected_cardinality						# numero geometrie nella query: numero geometrie totali * numero geometria nella query
 
-							try: 
+							try:
 								x1, y1, x2, y2 = get_coordinates(path_nameSummary, dataset_name)			# ricerca delle coordinate della finestra del dataset
 								coordinates_summary = (x1, y1, x2, y2)										# coordinate finestra del dataset
 								coordinates_rq = (minX, minY, maxX, maxY)									# coordinate finestra di range query selezionata
-								
+
 								# parametro categorizzato - "cardinality"
 								if param_to_categorize == "cardinality" or len(dist_data) == 0:
 									print(f"<System> Noised dataset by '{operation}' geometries: '{output_path}'")
-									
-									#label = selected_row['cardinality_class']								# cerco i valori del bin	
+
+									#label = selected_row['cardinality_class']								# cerco i valori del bin
 									#lower_bound, upper_bound = label.split('-')								# divido il bin in valore minimo e valore massimo
 									lower_bound, upper_bound = bin_label.split("-")								# divido il bin in valore minimo e valore massimo
 									delta = random.uniform(0, float(upper_bound)-float(lower_bound))		# valore random che sia tra l'intervallo bin in analisi
@@ -1449,24 +1453,24 @@ def main():
 									# operazione di incremento
 									else:
 										bound = float(lower_bound) + delta									# valore random nel bin corrente (calcolato da "lower_bound")
-										
+
 										# calcolo il numero di geometrie che vanno rimosse per aumentare la cardinalità (max evita numeri negativi, ceil arrotonda per eccesso)
 										num_boxes = max(0, math.ceil((bound * count_geom_tot - count_inside) / bound))
 										selected_cardinality = count_inside / (count_geom_tot - num_boxes)	# cardinalità finale dopo l'operazione di incremento
 										count_geom_tot = count_geom_tot - num_boxes							# numero di geometrie totali dopo l'operazione di incremennto
 
 										print(f"<System> Number of geometries to remove for the 'increase' operation: {num_boxes}")
-										
+
 										if not disjoint_df.empty:																																# caso in cui ci sono partizioni che non intersecano la finestra di query
 											remove_boxes_parallel(disjoint_name, intersecting_name, output_path, num_boxes, os.path.join(pathIndexes,f'{dataset_name}_spatialIndex'))			# rimozione delle geometrie e salvataggio del nuovo dataset
-										
+
 										if disjoint_df.empty:													# caso in cui non ci sono partizioni che non intersecano la finestra di query
 											checked_lines = set()												# terrà traccia degli indici già controllati
 											removed_lines = set()												# terrà traccia degli indici delle geometrie da rimuovere per incrementare "cardinality"
 
 											# continuo a ciclare finchè la cardinalità non si alza, rimuovendo geometrie all'esterno della finestra di range query
 											while float(selected_cardinality) < bound:
-												
+
 												line_index = random.randint(0, count_geom_tot - 1)		# seleziono una geometria random
 												if line_index in checked_lines:							# controllo se è già stata controllata, in caso la saltiamo
 													continue
@@ -1487,13 +1491,13 @@ def main():
 												# se abbiamo controllato tutte le geometrie disponibili, usciamo
 												if len(checked_lines) >= count_geom_tot:
 													break
-												
+
 												# generatore che produce tutte le linee non rimosse
 												def filtered_lines():
 													for i, line in enumerate(lines):
 														if i not in removed_lines:
 															yield line
-											
+
 											# Scrittura del file di output
 											chunk_size = 1024						# Adjust the chunk size as needed
 											with open(output_path, 'w') as file:
@@ -1570,43 +1574,43 @@ def main():
 											with open(output_path, 'w') as file:
 												file.writelines(lines)
 
-								# aggiornamento dei file	
+								# aggiornamento dei file
 								new_dataset_name = str(output_dataset).replace('.csv', '')											# nome nuovo dataset, senza estensione ".csv"
 								update_dataset_param(dataset_name, new_dataset_name, count_geom_tot, path_nameSummary, path_nameNewDatasets)
 								if param_to_categorize == "cardinality":
 									update_range_query_param2(file_index, new_dataset_name, selected_cardinality, bin_label, path_nameRangeQueriesResult)
 								else:
 									update_range_query_param2(file_index, new_dataset_name, selected_cardinality, bin_label, path_nameRangeQueriesResult)
-								
+
 								print("<System> The 'noise' operation for the following query has finished")
 
 							except subprocess.CalledProcessError as e:
 								print(f"<System> Error applying noise to dataset '{output_path}': {e}")
-							
+
 						else:
 							print("<System> No appropriate noise data found.")
-						
+
 					except Exception as e:
 						print(f"<System> An error occurred: {e}")
 						if os.path.exists(output_path):
 							os.remove(output_path)
 							print(f"<System> Removed file at {output_path} due to error.")
-												
+
 						num_queries_inserted -= 1
 				# -------------------------------------------------------------------------------------------------------------------------------------------
-				
+
 				# -------------------------------------------------------------------------------------------------------------------------------------------
 				# TERZA TECNICA DI AUGMENTATION - "MERGE"
-				
+
 				elif chosen_technique == 'merge':
 					try:
 						finish = False
 						# sfrutto le coppie di dataset disgiunti
 						for idx, (dataset1, dataset2, fleg1, fleg2) in enumerate(merge_table):
-							
+
 							if int(fleg1) == 1 and int(fleg2) == 1:
 								continue
-							
+
 							print(f"<System> Let's analyze '{dataset1}' and '{dataset2}'!")
 							tent = 0
 							finish = False
@@ -1623,7 +1627,7 @@ def main():
 									# aggiorno "fleg1" così da non ricontrollarlo più
 									fleg1 = 1
 									merge_table[idx] = (dataset1, dataset2, fleg1, fleg2)
-									
+
 									# analizzo 20 queries
 									tent = 0
 									while tent != 20:
@@ -1645,7 +1649,7 @@ def main():
 									# aggiorno "fleg2" così da non ricontrollarlo più
 									fleg2 = 1
 									merge_table[idx] = (dataset1, dataset2, fleg1, fleg2)
-									
+
 									# analizzo 20 queries
 									tent = 0
 									while tent != 20:
@@ -1673,7 +1677,7 @@ def main():
 								update_dataset_param(dataset1, dsNew_name, dsNew_features, path_nameSummary, path_nameNewDatasets)
 								update_rq_merge(rq_row, dsNew_name, dsNew_cardinality, bin_label, path_nameRangeQueriesResult)
 								finish = True
-							
+
 							if finish:
 								break
 
@@ -1691,7 +1695,7 @@ def main():
 
 
 
-				
+
 
 
 				# aggiornamneto delle strutture usate
@@ -1699,12 +1703,12 @@ def main():
 
 				# Incremento del counter delle queries processate
 				num_queries_inserted += 1
-					
+
 				# Verifica se siano state o meno processate tutte le queries mancanti e, in caso affermativo, aggiorno i nuovi bin e passo al prossimo input
 				if num_queries_inserted >= num_queries:
 					update_bin(bin_label, len(dist_data_in) + num_queries_inserted, path_nameBin)
 					break
-				
+
 		# --------------------------------------------------------------------------------------------------------------------------------------------------
 		# CASO 4: non ci sono queries che rispettino la distribuzione selezionata - FINITO
 		else:
@@ -1716,7 +1720,7 @@ def main():
 		print(f"<System> The execution time for augmentation of input number {count + 1} was {end - start} seconds!")
 		print("<System> Processed inputs!")
 		print("----------------------------------------------------------------------------------------------------")
-	
+
 	print("<System> Finish augmentation of training set!")
 
 
