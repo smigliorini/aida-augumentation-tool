@@ -43,8 +43,15 @@ docker-compose.override.yml
 # Ignora file specifici
 trainingSets/dataset_20251005_151537_2bfc68aa/training_set_1/rqR_dataset_20251005_151537_2bfc68aa_ts.csv
 
-# Puoi anche ignorare intere cartelle
+#Ignora intere cartelle
+augmentation_log/
 datasetsAugmentation/
-parent_dir_dataset/
+fractalDimension/
 indexes/
+parent_dir_dataset/
+parent_dir_histogram/
+parent_dir_input_ds/
+parent_dir_rank/
+parent_dir_rq_input/
+rangeQueriesResult/
 trainingSets/

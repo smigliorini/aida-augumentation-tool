@@ -23,6 +23,7 @@ from datetime import datetime
 import threading
 import glob
 import re
+import random
 
 # Third-party Library Imports
 import pandas as pd
@@ -304,10 +305,14 @@ def find_input_params_csv(dataset_folder_basename, input_ds_path):
 
 def _run_queries_thread(data):
     """
-    Runs the Scala RangeQueryApp for manually entered queries in a background thread.
-    This function contains the long-running logic: it prepares configuration files,
-    iterates through datasets, executes the Scala subprocess for each, and emits
-    progress and completion events via Socket.IO.
+    Runs the Scala RangeQueryApp in a background thread.
+    Handles both 'manual' specific queries and 'random' window generation logic.
+    
+    If mode is 'random', it fetches the MBR of each dataset from the summary file,
+    generates N random starting points (minX, minY) based on the user-provided
+    window length (lengthX, lengthY), and calculates the corresponding maxX/maxY.
+    
+    These generated queries are then written to the CSV input file for the Scala application.
 
     Args:
         data (dict): The original data dictionary from the 'generate_queries' event.
@@ -318,6 +323,7 @@ def _run_queries_thread(data):
         # Extract Data and Set Up Paths
         queries_from_frontend = data.get('queries', [])
         selected_folder_name = data.get('folder')
+        query_mode = data.get('mode', 'manual') # 'manual' or 'random'
 
         sbt_executable_name = "sbt"
         rqsbt_project_root = PARENT_DIRS['scala_project_root']
@@ -335,36 +341,109 @@ def _run_queries_thread(data):
             socketio.emit('generate_query_error', {'error': f"No dataset files found in folder '{selected_folder_name}'."})
             return
 
+        # Find corresponding summary file to get MBRs (needed for random generation)
+        mbr_summary_file_path = find_input_params_csv(os.path.basename(selected_folder_name), PARENT_DIRS['parent_dir_input_ds'])
+        if not mbr_summary_file_path or not os.path.exists(mbr_summary_file_path):
+             socketio.emit('generate_query_error', {'error': f"Corresponding MBR summary file not found for folder '{selected_folder_name}'."})
+             return
+
+        # Prepare the list of queries to write to CSV
+        processed_queries = []
+
+        if query_mode == 'random':
+            # Load MBRs from summary file into a dictionary
+            # MBR structure expected in summary CSV: datasetName; ...; x1; y1; x2; y2; ...
+            dataset_mbrs = {}
+            try:
+                with open(mbr_summary_file_path, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f, delimiter=';')
+                    for row in reader:
+                        ds_name = row.get('datasetName')
+                        try:
+                            # Convert coordinates to floats
+                            mbr = {
+                                'x1': float(row.get('x1', 0)), 'y1': float(row.get('y1', 0)),
+                                'x2': float(row.get('x2', 0)), 'y2': float(row.get('y2', 0))
+                            }
+                            dataset_mbrs[ds_name] = mbr
+                        except ValueError:
+                            logging.warning(f"Could not parse MBR for dataset {ds_name}")
+            except Exception as e:
+                socketio.emit('generate_query_error', {'error': f"Error reading MBR summary file: {str(e)}"})
+                return
+
+            # Generate random queries based on user input
+            for q in queries_from_frontend:
+                ds_name = q.get('datasetName')
+                num_queries = int(q.get('numQuery', 1))
+                length_x = float(q.get('lengthX', 0.1))
+                length_y = float(q.get('lengthY', 0.1))
+                
+                if ds_name not in dataset_mbrs:
+                    logging.warning(f"Dataset {ds_name} not found in summary file, skipping random generation.")
+                    continue
+                
+                mbr = dataset_mbrs[ds_name]
+                # Dataset Bounds
+                d_min_x, d_min_y = mbr['x1'], mbr['y1']
+                d_max_x, d_max_y = mbr['x2'], mbr['y2']
+
+                # Calculate valid ranges for random start point
+                # The start point (minX) must be between d_min_x and (d_max_x - length_x)
+                range_x = (d_max_x - d_min_x) - length_x
+                range_y = (d_max_y - d_min_y) - length_y
+
+                # Generate N random queries
+                for _ in range(num_queries):
+                    # Handle edge case where window is larger than dataset (start at min)
+                    rand_offset_x = random.uniform(0, range_x) if range_x > 0 else 0
+                    rand_offset_y = random.uniform(0, range_y) if range_y > 0 else 0
+
+                    gen_min_x = d_min_x + rand_offset_x
+                    gen_min_y = d_min_y + rand_offset_y
+                    gen_max_x = gen_min_x + length_x
+                    gen_max_y = gen_min_y + length_y
+                    
+                    # Calculate area for the record
+                    area = length_x * length_y
+
+                    processed_queries.append({
+                        "queryDatasetName": ds_name, "numQuery": 1, # Specific query, so num=1
+                        "queryArea": area, 
+                        "minX": gen_min_x, "minY": gen_min_y,
+                        "maxX": gen_max_x, "maxY": gen_max_y, 
+                        "areaint": q.get('areaint', 1)
+                    })
+        else:
+            # Manual Mode: Map frontend fields directly
+            for q in queries_from_frontend:
+                processed_queries.append({
+                    "queryDatasetName": q.get('datasetName', ''), "numQuery": q.get('numQuery', ''),
+                    "queryArea": q.get('queryArea', ''), "minX": q.get('minX', ''), "minY": q.get('minY', ''),
+                    "maxX": q.get('maxX', ''), "maxY": q.get('maxY', ''), "areaint": q.get('areaint', '')
+                })
+
         # Create a temporary CSV for query inputs
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         unique_id = uuid.uuid4().hex[:8]
-        query_input_csv_filename = f"rq_input_queries_manual_{os.path.basename(selected_folder_name)}_{timestamp}_{unique_id}.csv"
+        mode_suffix = "random" if query_mode == 'random' else "manual"
+        query_input_csv_filename = f"rq_input_queries_{mode_suffix}_{os.path.basename(selected_folder_name)}_{timestamp}_{unique_id}.csv"
         query_input_csv_path = os.path.abspath(os.path.join(rq_input_base_path, query_input_csv_filename))
 
         csv_columns_for_scala = ["queryDatasetName", "numQuery", "queryArea", "minX", "minY", "maxX", "maxY", "areaint"]
         with open(query_input_csv_path, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=csv_columns_for_scala, delimiter=';')
             writer.writeheader()
-            for q in queries_from_frontend:
-                writer.writerow({
-                    "queryDatasetName": q.get('datasetName', ''), "numQuery": q.get('numQuery', ''),
-                    "queryArea": q.get('queryArea', ''), "minX": q.get('minX', ''), "minY": q.get('minY', ''),
-                    "maxX": q.get('maxX', ''), "maxY": q.get('maxY', ''), "areaint": q.get('areaint', '')
-                })
+            for row in processed_queries:
+                writer.writerow(row)
 
-        # Find corresponding summary file
-        mbr_summary_file_path = find_input_params_csv(os.path.basename(selected_folder_name), PARENT_DIRS['parent_dir_input_ds'])
-        if not mbr_summary_file_path or not os.path.exists(mbr_summary_file_path):
-             socketio.emit('generate_query_error', {'error': f"Corresponding MBR summary file not found for folder '{selected_folder_name}'."})
-             if os.path.exists(query_input_csv_path): os.remove(query_input_csv_path)
-             return
-
-        # Filter datasets to process based on query definitions
-        datasets_in_query_file = {q.get('datasetName') for q in queries_from_frontend}
+        # Filter datasets to process based on query definitions (generated or manual)
+        datasets_in_query_file = {q.get('queryDatasetName') for q in processed_queries}
         datasets_to_process_actually = [df for df in dataset_files if os.path.splitext(df)[0] in datasets_in_query_file]
+        
         if not datasets_to_process_actually:
             socketio.emit('generate_query_error', {'error': 'None of the datasets in the folder are mentioned in the queries.'})
-            os.remove(query_input_csv_path)
+            if os.path.exists(query_input_csv_path): os.remove(query_input_csv_path)
             return
         
         # Process each dataset

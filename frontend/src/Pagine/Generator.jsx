@@ -3,6 +3,7 @@ import { Panel } from 'primereact/panel';
 import { Dropdown } from 'primereact/dropdown';
 import { FloatLabel } from 'primereact/floatlabel';
 import { InputNumber } from 'primereact/inputnumber';
+import { InputText } from 'primereact/inputtext'; // Imported for cell editing
 import { Button } from 'primereact/button';
 import { ProgressBar } from 'primereact/progressbar';
 import { Toast } from 'primereact/toast';
@@ -47,6 +48,8 @@ function Generator() {
     const [bitPropability, setBitProbability] = useState(null);
     const [bitDigits, setBitDigits] = useState(null);
     const [seed, setSeed] = useState(null);
+    // State for batch generation (number of datasets to insert at once).
+    const [numCopies, setNumCopies] = useState(1);
 
     // State for the bounding box coordinates.
     const [x1, setX1] = useState(null);
@@ -69,7 +72,7 @@ function Generator() {
     const [inputCsvFileName, setInputCsvFileName] = useState(null);
     
     // State for CSV upload functionality.
-    const [csvFile, setCsvFile] = useState(null);
+    // REMOVED: csvFile state is no longer needed as we parse immediately.
     const [useCsvUpload, setUseCsvUpload] = useState(false);
 
     // State for enabling expert user mode.
@@ -86,15 +89,47 @@ function Generator() {
     // State to control the visibility of the progress popup.
     const [isProgressDialogVisible, setIsProgressDialogVisible] = useState(false);
 
+    // --- HELPER FUNCTIONS ---
+
+    // Helper to render number editor for DataTable cells
+    const numberEditor = (options) => {
+        return <InputNumber value={options.value} onValueChange={(e) => options.editorCallback(e.value)} mode="decimal" minFractionDigits={0} maxFractionDigits={10} />;
+    };
+
+    // Helper to render text editor for DataTable cells
+    const textEditor = (options) => {
+        return <InputText type="text" value={options.value} onChange={(e) => options.editorCallback(e.target.value)} />;
+    };
+
+    // Callback when a cell is edited in the DataTable
+    const onCellEditComplete = (e) => {
+        let _datasets = [...datasets];
+        let { rowData, newValue, field, originalEvent } = e;
+
+        // Basic validation or type conversion if needed
+        if (newValue !== undefined && newValue !== null) {
+            rowData[field] = newValue;
+        } else {
+             originalEvent.preventDefault();
+        }
+
+        setDatasets(_datasets);
+    };
+
     // --- COMPONENT CONFIGURATION ---
 
     // Defines the columns for the datasets table; E0 and E2 columns are removed.
+    // ADDED: editor and onCellEditComplete to enable inline editing.
     const columns = [
-        { field: 'distribution', header: 'Distribution' }, { field: 'x1', header: 'X1' },
-        { field: 'y1', header: 'Y1' }, { field: 'x2', header: 'X2' }, { field: 'y2', header: 'Y2' },
-        { field: 'cardinality', header: 'Cardinality' },
-        { field: 'maxsize', header: 'avg_side_lengths' }, { field: 'polysize', header: 'avg_area' },
-        { field: 'maxseg', header: 'max_seg' },
+        { field: 'distribution', header: 'Distribution', editor: (options) => textEditor(options) }, 
+        { field: 'x1', header: 'X1', editor: (options) => numberEditor(options) },
+        { field: 'y1', header: 'Y1', editor: (options) => numberEditor(options) }, 
+        { field: 'x2', header: 'X2', editor: (options) => numberEditor(options) }, 
+        { field: 'y2', header: 'Y2', editor: (options) => numberEditor(options) },
+        { field: 'cardinality', header: 'Cardinality', editor: (options) => numberEditor(options) },
+        { field: 'maxsize', header: 'avg_side_lengths', editor: (options) => textEditor(options) }, 
+        { field: 'polysize', header: 'avg_area', editor: (options) => numberEditor(options) },
+        { field: 'maxseg', header: 'max_seg', editor: (options) => numberEditor(options) },
         {
             header: 'Actions',
             body: (rowData) => (<Button icon="pi pi-trash" className="p-button-danger" onClick={() => handleDelete(rowData)} />)
@@ -193,13 +228,77 @@ function Generator() {
         return () => { socket.disconnect(); };
     }, []);
 
-    // Handles the selection of a CSV file for upload.
+    // Handles the selection of a CSV file for upload AND PARSES IT.
     const handleCsvFileUpload = (event) => {
         const file = event.files[0];
         if (file) {
             const reader = new FileReader();
-            reader.onload = (e) => setCsvFile(e.target.result);
-            reader.readAsDataURL(file);
+            reader.onload = (e) => {
+                const text = e.target.result;
+                try {
+                    // Simple semicolon CSV parser
+                    const lines = text.split(/\r?\n/);
+                    const headers = lines[0].split(';').map(h => h.trim());
+                    
+                    const parsedDatasets = [];
+                    let currentId = idCounter; // Use state counter to ensure unique IDs
+
+                    for (let i = 1; i < lines.length; i++) {
+                        if (!lines[i].trim()) continue;
+                        
+                        const values = lines[i].split(';');
+                        const row = { id: currentId++ }; // Assign ID for React Key
+                        
+                        headers.forEach((header, index) => {
+                            let value = values[index]?.trim();
+                            // Convert numeric values
+                            if (!isNaN(value) && value !== '') {
+                                value = parseFloat(value);
+                            }
+                            
+                            // Map CSV headers to internal state keys if they differ
+                            // For simplicity, we assume CSV headers match state keys or close enough
+                            // Specifically handle 'avg_side_length_0' & 'avg_side_length_1' mapping to 'maxsize' string
+                            
+                            row[header] = value;
+                        });
+
+                        // Post-processing for Generator specific structure
+                        // The backend expects "maxsize" as "val1,val2" if side lengths are provided
+                        if (row.avg_side_length_0 !== undefined && row.avg_side_length_1 !== undefined) {
+                            row.maxsize = `${row.avg_side_length_0},${row.avg_side_length_1}`;
+                            row.polysize = row.avg_side_length_0 * row.avg_side_length_1;
+                        }
+                        
+                        // Default dimension if missing
+                        if (!row.dimensions) row.dimensions = 2;
+                        if (!row.format && row.geometry) {
+                             row.format = row.geometry.toLowerCase() === 'polygon' ? 'wkt' : 'csv';
+                        }
+                        
+                        // Ensure distribution/geometry case matches what backend might expect if passed as string
+                        if(row.distribution && typeof row.distribution === 'string') row.distribution = row.distribution.toLowerCase();
+                        if(row.geometry && typeof row.geometry === 'string') row.geometry = row.geometry.toLowerCase();
+
+                        parsedDatasets.push(row);
+                    }
+
+                    // Update state with parsed datasets
+                    setDatasets(prev => [...prev, ...parsedDatasets]);
+                    setIdCounter(currentId);
+                    setInputCsvFileName(file.name);
+                    
+                    toast.current.show({ severity: 'success', summary: 'CSV Imported', detail: `Imported ${parsedDatasets.length} datasets. You can now edit them below.`, life: 5000 });
+                    
+                    // Switch back to manual mode to show the table
+                    setUseCsvUpload(false);
+                    
+                } catch (err) {
+                    console.error("CSV Parsing Error", err);
+                    toast.current.show({ severity: 'error', summary: 'Parsing Error', detail: 'Could not parse the CSV file.', life: 5000 });
+                }
+            };
+            reader.readAsText(file); // Read as text
         }
     };
 
@@ -220,7 +319,7 @@ dataset3;uniform;box;9.5;3.5;16.5;9.5;300;4;;0.02;0.1;0.2;;
         document.body.removeChild(link);
     };
 
-    // Validates inputs and adds the current dataset configuration to the table.
+    // Validates inputs and adds one or multiple datasets to the table.
     const insertDataset = () => {
         // Ensure all required fields are filled.
         if (!distribution || !cardinality || !dimensions || !geometry || !format || x1 === null || y1 === null || x2 === null || y2 === null) {
@@ -234,74 +333,94 @@ dataset3;uniform;box;9.5;3.5;16.5;9.5;300;4;;0.02;0.1;0.2;;
             return;
         }
 
-        const newId = idCounter;
+        // Prepare a temporary array to hold the new datasets.
+        const newDatasets = [];
+        let currentId = idCounter;
 
-        // Build the dataset object with all common parameters.
-        const dataToSend = {
-            id: newId,
-            distribution: distribution.name.toLowerCase(),
-            cardinality: parseInt(cardinality, 10),
-            dimensions: parseInt(dimensions, 10),
-            geometry: geometry.name.toLowerCase(),
-            format: format.name.toLowerCase(),
-            x1: x1, y1: y1, x2: x2, y2: y2,
-        };
+        // Loop to create the requested number of copies.
+        for (let i = 0; i < numCopies; i++) {
+            
+            // Build the dataset object with all common parameters.
+            const dataToSend = {
+                id: currentId,
+                distribution: distribution.name.toLowerCase(),
+                cardinality: parseInt(cardinality, 10),
+                dimensions: parseInt(dimensions, 10),
+                geometry: geometry.name.toLowerCase(),
+                format: format.name.toLowerCase(),
+                x1: x1, y1: y1, x2: x2, y2: y2,
+            };
 
-        // Automatically calculate polysize (avg_area) and remove E0/E2 logic.
-        if (avgSideLength0 !== null && avgSideLength1 !== null) {
-            dataToSend.maxsize = `${avgSideLength0},${avgSideLength1}`;
-            dataToSend.polysize = avgSideLength0 * avgSideLength1; // Automatic calculation
+            // Increment ID for the next iteration/dataset.
+            currentId++;
+
+            // Automatically calculate polysize (avg_area).
+            if (avgSideLength0 !== null && avgSideLength1 !== null) {
+                dataToSend.maxsize = `${avgSideLength0},${avgSideLength1}`;
+                dataToSend.polysize = avgSideLength0 * avgSideLength1; 
+            }
+            
+            // Hybrid logic for max_seg.
+            switch (dataToSend.geometry) {
+                case 'point':
+                    dataToSend.maxseg = 1; 
+                    break;
+                case 'box':
+                    dataToSend.maxseg = 4; 
+                    break;
+                case 'polygon':
+                    if (maxSeg !== null) { 
+                        dataToSend.maxseg = maxSeg;
+                    }
+                    break;
+                default:
+                    break;
+            }
+            
+            // Add distribution-specific parameters.
+            switch (dataToSend.distribution) {
+                case 'diagonal':
+                    dataToSend.percentage = (isExpertMode && diagPercentage !== null) ? diagPercentage : 0.5;
+                    dataToSend.buffer = (isExpertMode && diagBuffer !== null) ? diagBuffer : 0.5;
+                    break;
+                case 'bit':
+                    dataToSend.probability = (isExpertMode && bitPropability !== null) ? bitPropability : 0.2;
+                    dataToSend.digits = (isExpertMode && bitDigits !== null) ? bitDigits : 10;
+                    break;
+                case 'parcel':
+                    dataToSend.srange = (isExpertMode && parcSrange !== null) ? parcSrange : 0.5;
+                    dataToSend.dither = (isExpertMode && parcDither !== null) ? parcDither : 0.5;
+                    break;
+                default:
+                    break;
+            }
+
+            if (affineMatrix) dataToSend.affinematrix = affineMatrix;
+            if (compress) dataToSend.compress = compress;
+            
+            // Handle Seed: If provided, increment it for each copy to ensure deterministic but distinct results.
+            if (seed !== null) {
+                dataToSend.seed = parseInt(seed, 10) + i;
+            }
+
+            newDatasets.push(dataToSend);
         }
-        
-        // Hybrid logic for max_seg.
-        switch (dataToSend.geometry) {
-            case 'point':
-                dataToSend.maxseg = 1; // Hardcode to 1 for Points
-                break;
-            case 'box':
-                dataToSend.maxseg = 4; // Hardcode to 4 for Boxes
-                break;
-            case 'polygon':
-                if (maxSeg !== null) { // Use user input for Polygons
-                    dataToSend.maxseg = maxSeg;
-                }
-                break;
-            default:
-                break;
-        }
-        
-        // Add distribution-specific parameters. Use hardcoded defaults unless in Expert Mode.
-        switch (dataToSend.distribution) {
-            case 'diagonal':
-                dataToSend.percentage = (isExpertMode && diagPercentage !== null) ? diagPercentage : 0.5;
-                dataToSend.buffer = (isExpertMode && diagBuffer !== null) ? diagBuffer : 0.5;
-                break;
-            case 'bit':
-                dataToSend.probability = (isExpertMode && bitPropability !== null) ? bitPropability : 0.2;
-                dataToSend.digits = (isExpertMode && bitDigits !== null) ? bitDigits : 10;
-                break;
-            case 'parcel':
-                dataToSend.srange = (isExpertMode && parcSrange !== null) ? parcSrange : 0.5;
-                dataToSend.dither = (isExpertMode && parcDither !== null) ? parcDither : 0.5;
-                break;
-            default:
-                break;
-        }
 
-        if (affineMatrix) dataToSend.affinematrix = affineMatrix;
-        if (compress) dataToSend.compress = compress;
-        if (seed) dataToSend.seed = seed;
+        // Update state with the new list of datasets.
+        setDatasets([...datasets, ...newDatasets]);
+        setIdCounter(currentId);
 
-        // Add the new dataset to the list and increment the ID counter.
-        setDatasets([...datasets, dataToSend]);
-        setIdCounter(prevId => prevId + 1);
-
-        // Reset all input fields for the next entry; avgArea, E0, and E2 setters removed.
+        // Reset all input fields for the next entry (except optional expert settings if desired, but here we clear all).
         setDistribution(null); setGeometry(null); setCardinality(null);
         setFormat(null); setAvgSideLength0(null); setAvgSideLength1(null); setDiagPercentage(null);
         setDiagBuffer(null); setParcSrange(null); setParcDither(null); setAffineMatrix('');
         setCompress(false); setBitProbability(null); setBitDigits(null);
         setMaxSeg(null); setSeed(null); setX1(null); setY1(null); setX2(null); setY2(null);
+        
+        // Reset numCopies back to 1.
+        setNumCopies(1);
+
+        toast.current.show({ severity: 'success', summary: 'Success', detail: `${numCopies} dataset(s) added successfully.`, life: 3000 });
     };
 
     // Copies the values from the last inserted dataset into the input fields.
@@ -355,6 +474,13 @@ dataset3;uniform;box;9.5;3.5;16.5;9.5;300;4;;0.02;0.1;0.2;;
         setDatasets(datasets.filter(item => item.id !== rowData.id));
     };
 
+    // Clears all datasets from the table and resets the ID counter.
+    const clearAllDatasets = () => {
+        setDatasets([]);
+        setIdCounter(1);
+        toast.current.show({ severity: 'info', summary: 'Cleared', detail: 'All datasets have been removed.', life: 3000 });
+    };
+
     // Resets the UI state before starting data generation.
     const startGeneration = () => {
         setLoading(true);
@@ -367,7 +493,7 @@ dataset3;uniform;box;9.5;3.5;16.5;9.5;300;4;;0.02;0.1;0.2;;
         setIsProgressDialogVisible(true); // Show the progress popup.
     };
 
-    // Sends the manually entered datasets to the server for generation.
+    // Sends the datasets (from manual input or imported CSV) to the server.
     const generateData = () => {
         if (datasets.length === 0) {
             toast.current.show({ severity: 'warn', summary: 'Warning', detail: 'Add at least one dataset to the table.', life: 5000 });
@@ -380,16 +506,7 @@ dataset3;uniform;box;9.5;3.5;16.5;9.5;300;4;;0.02;0.1;0.2;;
         socket.emit('generate_data', { datasets: dataToSendToServer, folder: selectedFolder });
     };
 
-    // Sends the uploaded CSV file to the server for generation.
-    const generateDataCsv = () => {
-        if (!csvFile) {
-            toast.current.show({ severity: 'warn', summary: 'Warning', detail: 'Please upload a CSV file.', life: 3000 });
-            return;
-        }
-        startGeneration();
-        // Use the imported socket instance to emit the event.
-        socket.emit('generate_data_from_csv', { csvFile: csvFile, folder: selectedFolder });
-    };
+    // REMOVED: generateDataCsv. We now use standard generateData after parsing.
 
     // --- RENDER ---
     
@@ -415,8 +532,8 @@ dataset3;uniform;box;9.5;3.5;16.5;9.5;300;4;;0.02;0.1;0.2;;
                         )}
                     </div>
 
-                    {/* Manual input form, shown when CSV upload is disabled */}
-                    {!useCsvUpload && (
+                    {/* Manual input form - SHOWN ALSO FOR PREVIEW AFTER CSV UPLOAD */}
+                    {!useCsvUpload ? (
                         <>
                             <div className="pt-4 flex flex-wrap gap-3">
                                 {/* Input fields for manual data generation */}
@@ -448,35 +565,69 @@ dataset3;uniform;box;9.5;3.5;16.5;9.5;300;4;;0.02;0.1;0.2;;
                                 {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('parcDither') && <FloatLabel><InputNumber inputId="parcDither" value={parcDither} onChange={(e) => setParcDither(e.value)} minFractionDigits={0} maxFractionDigits={10} variant="filled" placeholder="Default: 0.5" /><label htmlFor="parcDither">Dither</label></FloatLabel>}
                                 {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('bitPropability') && <FloatLabel><InputNumber inputId="bitPropability" value={bitPropability} onChange={(e) => setBitProbability(e.value)} minFractionDigits={0} maxFractionDigits={10} variant="filled" placeholder="Default: 0.2" /><label htmlFor="bitPropability">Probability</label></FloatLabel>}
                                 {isExpertMode && dependentFieldsMap[`${distribution?.name}-${geometry?.name}`]?.includes('bitDigits') && <FloatLabel><InputNumber inputId="bitDigits" value={bitDigits} onChange={(e) => setBitDigits(e.value)} variant="filled" placeholder="Default: 10" /><label htmlFor="bitDigits">Digits</label></FloatLabel>}
-                                
+                                    
                                 {/* Action buttons */}
-                                <div className='flex justify-content-end flex-wrap gap-2'>
-                                    {/* Button to copy the last entered dataset for quick editing */}
-                                    <Button onClick={copyLastDataset} disabled={datasets.length === 0} icon="pi pi-copy" tooltip="Copy Last Dataset" className="p-button-secondary" />
-                                    <Button onClick={insertDataset}>Insert Dataset</Button>
-                                    <Button onClick={generateData}>Submit</Button>
+                                <div className='flex justify-content-end flex-wrap gap-2 w-full'>
+                                    {/* Input for batch insertion count */}
+                                    <FloatLabel>
+                                        <InputNumber 
+                                            inputId="numCopies" 
+                                            value={numCopies} 
+                                            onValueChange={(e) => setNumCopies(e.value)} 
+                                            min={1} 
+                                            max={1000} 
+                                            showButtons 
+                                            buttonLayout="horizontal"
+                                            step={1}
+                                            decrementButtonClassName="p-button-secondary"
+                                            incrementButtonClassName="p-button-secondary"
+                                            incrementButtonIcon="pi pi-plus"
+                                            decrementButtonIcon="pi pi-minus"
+                                            inputStyle={{width: '4rem', textAlign: 'center'}}
+                                        />
+                                        <label htmlFor="numCopies">Batch Size</label>
+                                    </FloatLabel>
+                                    
+                                    <Button 
+                                        onClick={clearAllDatasets} 
+                                        disabled={datasets.length === 0} 
+                                        icon="pi pi-trash" 
+                                        label="Clear All"
+                                        className="p-button-danger p-button-outlined" 
+                                        tooltip="Remove all datasets from the table"
+                                    />
+                                    <Button 
+                                        onClick={copyLastDataset} 
+                                        disabled={datasets.length === 0} 
+                                        icon="pi pi-copy" 
+                                        tooltip="Copy Last Dataset" 
+                                        className="p-button-secondary" 
+                                    />
+                                    <Button onClick={insertDataset} label="Insert Dataset" />
+                                    <Button onClick={generateData} label="Submit" />
                                 </div>
                             </div>
                             {/* Table to display the list of datasets to be generated */}
+                            {/* Enabled cell editing (editMode="cell") to allow data modification */}
                             <div>
-                                <DataTable value={datasets} showGridlines tableStyle={{ minWidth: '50rem' }} className='pt-3'>
-                                    {columns.map((col, i) => (<Column key={col.field || i} field={col.field} header={col.header} body={col.body} />))}
+                                <DataTable value={datasets} showGridlines tableStyle={{ minWidth: '50rem' }} className='pt-3' editMode="cell" onCellEditComplete={onCellEditComplete} paginator rows={15} rowsPerPageOptions={[5, 10, 15, 25, 50, 100]}>
+                                    {columns.map((col, i) => (<Column key={col.field || i} field={col.field} header={col.header} body={col.body} editor={col.editor} onCellEditComplete={onCellEditComplete}/>))}
                                 </DataTable>
+                                <p className="text-sm text-gray-500 mt-2">* Click on a cell to edit its value.</p>
                             </div>
                         </>
-                    )}
-                    
-                    {/* CSV upload section, shown when enabled. Now includes instructions and a template download button. */}
-                    {useCsvUpload && (
+                    ) : (
+                        
+                        // CSV upload section
                         <div className='pt-4'>
                             <div className='pb-3'>
-                                <p className="m-0">Fill the CSV file with one row for each dataset to be generated.</p>
+                                <p className="m-0">Upload a CSV file to populate the table. You can then preview and edit the data before submission.</p>
                                 <p className="m-0" style={{ fontSize: '18px', fontWeight: 'bold', color: '#9FDAA8' }}>IMPORTANT: Dataset names must not contain special characters, always as name1, box2, first3, ecc...</p>
                             </div>
                             <div className='flex flex-wrap gap-3'>
-                                <FileUpload mode="basic" accept=".csv" chooseLabel="Choose CSV" onSelect={handleCsvFileUpload} auto={false} />
+                                {/* Use standard FileUpload but handle with custom parser logic */}
+                                <FileUpload mode="basic" accept=".csv" chooseLabel="Choose CSV" onSelect={handleCsvFileUpload} auto={true} />
                                 <Button onClick={downloadCsvTemplate} label="Download CSV Template" icon="pi pi-download" className="p-button-secondary" />
-                                <div className='flex justify-content-end flex-wrap'><Button onClick={generateDataCsv}>Submit CSV File</Button></div>
                             </div>
                         </div>
                     )}
