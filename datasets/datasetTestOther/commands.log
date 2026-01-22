@@ -1,0 +1,15 @@
+python -W ignore generator.py distribution=sierpinski cardinality=500000 dimensions=2 geometry=point polysize=0.0006 maxseg=1 format=csv affinematrix=7.0,0,1.5,0,6.0,3.5 maxsize=0.03,0.02
+python -W ignore generator.py distribution=sierpinski cardinality=500000 dimensions=2 geometry=box polysize=0.0006 maxseg=4 format=csv affinematrix=7.0,0,1.5,0,6.0,3.5 maxsize=0.03,0.02
+python -W ignore generator.py distribution=sierpinski cardinality=500000 dimensions=2 geometry=polygon polysize=0.0006 maxseg=5 format=wkt affinematrix=7.0,0,1.5,0,6.0,3.5 maxsize=0.03,0.02
+python -W ignore generator.py distribution=diagonal cardinality=500000 dimensions=2 geometry=point polysize=0.0006 maxseg=1 format=csv affinematrix=7.0,0,1.5,0,6.0,3.5 maxsize=0.03,0.02 percentage=0.5 buffer=0.5
+python -W ignore generator.py distribution=diagonal cardinality=500000 dimensions=2 geometry=box polysize=0.0006 maxseg=4 format=csv affinematrix=7.0,0,1.5,0,6.0,3.5 maxsize=0.03,0.02 percentage=0.5 buffer=0.5
+python -W ignore generator.py distribution=diagonal cardinality=500000 dimensions=2 geometry=polygon polysize=0.0006 maxseg=5 format=wkt affinematrix=7.0,0,1.5,0,6.0,3.5 maxsize=0.03,0.02 percentage=0.5 buffer=0.5
+python -W ignore generator.py distribution=bit cardinality=500000 dimensions=2 geometry=point polysize=0.0006 maxseg=1 format=csv affinematrix=7.0,0,1.5,0,6.0,3.5 maxsize=0.03,0.02 probability=0.2 digits=10
+python -W ignore generator.py distribution=bit cardinality=500000 dimensions=2 geometry=box polysize=0.0006 maxseg=4 format=csv affinematrix=7.0,0,1.5,0,6.0,3.5 maxsize=0.03,0.02 probability=0.2 digits=10
+python -W ignore generator.py distribution=bit cardinality=500000 dimensions=2 geometry=polygon polysize=0.0006 maxseg=5 format=wkt affinematrix=7.0,0,1.5,0,6.0,3.5 maxsize=0.03,0.02 probability=0.2 digits=10
+python -W ignore generator.py distribution=gaussian cardinality=500000 dimensions=2 geometry=point polysize=0.0006 maxseg=1 format=csv affinematrix=7.0,0,1.5,0,6.0,3.5 maxsize=0.03,0.02
+python -W ignore generator.py distribution=gaussian cardinality=500000 dimensions=2 geometry=box polysize=0.0006 maxseg=4 format=csv affinematrix=7.0,0,1.5,0,6.0,3.5 maxsize=0.03,0.02
+python -W ignore generator.py distribution=gaussian cardinality=500000 dimensions=2 geometry=polygon polysize=0.0006 maxseg=5 format=wkt affinematrix=7.0,0,1.5,0,6.0,3.5 maxsize=0.03,0.02
+python -W ignore generator.py distribution=parcel cardinality=500000 dimensions=2 geometry=point polysize=0.0006 maxseg=1 format=csv affinematrix=7.0,0,1.5,0,6.0,3.5 maxsize=0.03,0.02 srange=0.5 dither=0.5
+python -W ignore generator.py distribution=parcel cardinality=500000 dimensions=2 geometry=box polysize=0.0006 maxseg=4 format=csv affinematrix=7.0,0,1.5,0,6.0,3.5 maxsize=0.03,0.02 srange=0.5 dither=0.5
+python -W ignore generator.py distribution=parcel cardinality=500000 dimensions=2 geometry=box polysize=0.0006 maxseg=4 format=csv affinematrix=7.0,0,1.5,0,6.0,3.5 maxsize=0.03,0.02 srange=0.5 dither=0.5
