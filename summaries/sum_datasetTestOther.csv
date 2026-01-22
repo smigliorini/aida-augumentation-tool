@@ -1,0 +1,16 @@
+datasetName;distribution;geometry;x1;y1;x2;y2;num_features;max_seg;num_points;avg_area;avg_side_length_0;avg_side_length_1;E0;E2
+dataset0001;sierpinski;point;1.5;3.5;8.5;9.5;500000;1;;0.0006;0.03;0.02;;
+dataset0002;sierpinski;box;1.5;3.5;8.5;9.5;500000;4;;0.0006;0.03;0.02;;
+dataset0003;sierpinski;polygon;1.5;3.5;8.5;9.5;500000;5;;0.0006;0.03;0.02;;
+dataset0004;diagonal;point;1.5;3.5;8.5;9.5;500000;1;;0.0006;0.03;0.02;;
+dataset0005;diagonal;box;1.5;3.5;8.5;9.5;500000;4;;0.0006;0.03;0.02;;
+dataset0006;diagonal;polygon;1.5;3.5;8.5;9.5;500000;5;;0.0006;0.03;0.02;;
+dataset0007;bit;point;1.5;3.5;8.5;9.5;500000;1;;0.0006;0.03;0.02;;
+dataset0008;bit;box;1.5;3.5;8.5;9.5;500000;4;;0.0006;0.03;0.02;;
+dataset0009;bit;polygon;1.5;3.5;8.5;9.5;500000;5;;0.0006;0.03;0.02;;
+dataset0010;gaussian;point;1.5;3.5;8.5;9.5;500000;1;;0.0006;0.03;0.02;;
+dataset0011;gaussian;box;1.5;3.5;8.5;9.5;500000;4;;0.0006;0.03;0.02;;
+dataset0012;gaussian;polygon;1.5;3.5;8.5;9.5;500000;5;;0.0006;0.03;0.02;;
+dataset0013;parcel;box;1.5;3.5;8.5;9.5;500000;4;;0.0006;0.03;0.02;;
+dataset0014;parcel;box;1.5;3.5;8.5;9.5;500000;4;;0.0006;0.03;0.02;;
+dataset0015;parcel;box;1.5;3.5;8.5;9.5;500000;4;;0.0006;0.03;0.02;;
