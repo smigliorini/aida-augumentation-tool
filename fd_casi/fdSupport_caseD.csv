@@ -1,0 +1,58 @@
+CASO D - cardinality || mbrTests || totalExecutionTime (su rqR..._ts)
+L'utente vuole calcolare la dimensione frattale sui parametri risultanti dal processo di augmentation sul training set.
+Campi necessari per il calcolo richiesto:
+	- pathDatasets		--> NO! Inserire '';
+	- pathSummary		--> NO! Inserire '';
+	- nameSummary		--> NO! Inserire '';
+	- pathRangeQuery_ts --> SI! Percorso contenente il file degli esiti delle range queries prima o dopo augmentation;
+	- nameRangeQuery_ts --> SI! Nome del file 'range queries result' in questione;
+	- fromX				--> NO! Inserire '';
+	- toX				--> NO! Inserire '';
+	- pathFD			--> NO! Inserire '';
+	- pathFD_ts			--> SI! Percorso dove salvare gli esiti del calcolo delle dimensioni frattali;
+	- parameters		--> SI! lista di parametri (anche solo uno) su cui calcolare la dimensione frattale (*).
+
+(*) Possono essere inseriti solo parametri riguardanti lo stesso caso.
+
+---------------------------------------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+ESEMPIO:
+
+[FASE 1] Front-end --> Back-end
+* fdParameters.csv *
+pathDatasets;pathSummary;nameSummary;pathRangeQuery_ts;nameRangeQuery_ts;fromX;toX;pathFD;pathFD_ts;parameters
+;;;trainingSets/datasetTestFD/training_set_1;rqR_datasetTestFD_ts.csv;;;;trainingSets/datasetTestFD/training_set_1;cardinality;mbrTests;totalExecutionTime
+
+* fdSupport.csv *
+parameter;path_nameSummary;datasetName;path_nameFD;start;end;dim;values
+cardinality;;;;;;;
+mbrTests;;;;;;;
+totalExecutionTime;;;;;;;
+
+[FASE 2] Back-end --> Front-end
+* fdParameters.csv *
+pathDatasets;pathSummary;nameSummary;pathRangeQuery_ts;nameRangeQuery_ts;fromX;toX;pathFD;pathFD_ts;parameters
+;;;trainingSets/datasetTestFD/training_set_1;rqR_datasetTestFD_ts.csv;;;;trainingSets/datasetTestFD/training_set_1;cardinality;mbrTests;totalExecutionTime
+
+* fdSupport.csv *
+parameter;path_nameSummary;datasetName;path_nameFD;start;end;dim;values
+cardinality;;;trainingSets/datasetTestFD/training_set_1\fd_rqR_datasetTestFD_ts.csv;;;11;-15.321928094887364;-14.321928094887364;-13.321928094887364;-12.321928094887364;-11.321928094887364;-10.321928094887362;-9.321928094887362;-8.321928094887362;-7.321928094887362;-6.321928094887362;-5.321928094887363;7.643856189774724;7.643856189774724;7.643856189774724;7.643856189774724;7.643856189774724;8.426264754702098;9.303780748177104;10.294620748891628;11.290018846932618;12.28886607416582;13.288000889707574
+mbrTests;;;trainingSets/datasetTestFD/training_set_1\fd_rqR_datasetTestFD_ts.csv;;;11;1.2877123795494494;2.287712379549449;3.2877123795494496;4.28771237954945;5.28771237954945;6.28771237954945;7.2877123795494505;8.28771237954945;9.287712379549449;10.287712379549449;11.287712379549449;7.643856189774724;7.643856189774724;7.643856189774724;7.643856189774724;7.643856189774724;8.426264754702098;9.303780748177104;10.294620748891628;11.290018846932618;12.28828934218097;13.288000889707574
+totalExecutionTime;;;trainingSets/datasetTestFD/training_set_1\fd_rqR_datasetTestFD_ts.csv;;;11;-8.678071905112638;-7.678071905112637;-6.678071905112637;-5.678071905112638;-4.678071905112638;-3.678071905112638;-2.678071905112638;-1.6780719051126378;-0.6780719051126377;0.32192809488736235;1.3219280948873624;7.643856189774724;7.643856189774724;7.643856189774724;7.643856189774724;7.643856189774724;8.426264754702098;9.303780748177104;10.294620748891628;11.290018846932618;12.28828934218097;13.288000889707574
+
+[FASE 3] Front-end --> Back-end
+* fdParameters.csv *
+pathDatasets;pathSummary;nameSummary;pathRangeQuery_ts;nameRangeQuery_ts;fromX;toX;pathFD;pathFD_ts;parameters
+;;;;;;;;;fd
+
+* fdSupport.csv *
+parameter;path_nameSummary;datasetName;path_nameFD;start;end;dim;values
+cardinality;;;trainingSets/datasetTestFD/training_set_1\fd_rqR_datasetTestFD_ts.csv;4;9;11;-15.321928094887364;-14.321928094887364;-13.321928094887364;-12.321928094887364;-11.321928094887364;-10.321928094887362;-9.321928094887362;-8.321928094887362;-7.321928094887362;-6.321928094887362;-5.321928094887363;7.643856189774724;7.643856189774724;7.643856189774724;7.643856189774724;7.643856189774724;8.426264754702098;9.303780748177104;10.294620748891628;11.290018846932618;12.28886607416582;13.288000889707574
+mbrTests;;;trainingSets/datasetTestFD/training_set_1\fd_rqR_datasetTestFD_ts.csv;4;9;11;1.2877123795494494;2.287712379549449;3.2877123795494496;4.28771237954945;5.28771237954945;6.28771237954945;7.2877123795494505;8.28771237954945;9.287712379549449;10.287712379549449;11.287712379549449;7.643856189774724;7.643856189774724;7.643856189774724;7.643856189774724;7.643856189774724;8.426264754702098;9.303780748177104;10.294620748891628;11.290018846932618;12.28828934218097;13.288000889707574
+totalExecutionTime;;;trainingSets/datasetTestFD/training_set_1\fd_rqR_datasetTestFD_ts.csv;4;9;11;-8.678071905112638;-7.678071905112637;-6.678071905112637;-5.678071905112638;-4.678071905112638;-3.678071905112638;-2.678071905112638;-1.6780719051126378;-0.6780719051126377;0.32192809488736235;1.3219280948873624;7.643856189774724;7.643856189774724;7.643856189774724;7.643856189774724;7.643856189774724;8.426264754702098;9.303780748177104;10.294620748891628;11.290018846932618;12.28828934218097;13.288000889707574
+
+[FASE 4] Back-end
+* trainingSets/datasetTestFD/training_set_1/fd_rqR_datasetTestFD_ts.csv * --> creazione del file (se necessaria) e inserimento dei parametri richiesti
+cardinality;mbrTests;totalExecutionTime
+0.9373471914103303;0.9372648011267803;0.9372648011267805
