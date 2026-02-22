@@ -1,112 +1,116 @@
 # AIDA: A Spatial Data Augmentation Tool for Machine Learning Dataset Preparation
 
-## CARTELLE:
-**datasets** --> cartella contenente tutti i datasets generati, divisi in cartelle in base a come sono stati generati.
+## FLUSSO CORRETTO DI ESECUZIONE
 
-          - nomi cartelle: "datasetsData_Time_UniqueCode"; --> cartella contenente i datasets generati in "Data", "Time" con "UniqueCode"
-          - nomi file: "datasetNumber.extension".          --> file contenente le geometrie di "datasetNumber" (extension: ".csv" o ".wkt")
+## STEP 1 - Generazione dei dataset
+**1.1 Compilazione del sommario**
 
-**fd** --> cartella contenente tutti i file con le dimensioni frattali (?). I nomi dei file, dipendono dalla cartella dataset corrispondente.
+Il primo passo è la stesura del sommario contenente le informazioni sui dataset da generare. Il file si chiamerà '*sum_datasetData_Time_UniqueCode.csv*' e dovrà essere inserito nella cartella '*summaries*'. Questo file conterrà una riga di header e ogni riga successiva corrisponderà a un dataset da generare appartenente a quel sommario. I campi del sommario saranno i seguenti:
+- datasetName --> nome dell'i-esimo dataset (*datasetNumber*);
+- distribution --> distribuzione delle geometrie interne al dataset in questione (campi possibili: *uniform, diagonal, gaussian, parcel, bit o sierpinski*);
+- geometry --> tipo di geometria presente nel dataset in questione (campi possibili: *point, box o polygon*);
+- x1, y1, x2, y2 --> dimensione della finestra relativa al dataset in questione (*[x1;y1]* punto basso sinistra, *[x2;y2]* punto alto destra);
+- num_features --> numero di geometrie da generare relative al dataset in questione (*numGeometries*);
+- max_seg --> numero di lati massimo relativo a ciascuna geometrie (*point* -> 1, *box* -> 4, *polygon* -> >3);
+- num_points --> ;
+- avg_area --> valore medio dell'area di ciascuna geometria (in linea generale, il prodotto tra *avg_side_length_0* e *avg_side_length_1*);
+- avg_side_length_0 --> valore medio della dimensione relativa alla geometria, lato x;
+- avg_side_length_1 --> valore medio della dimensione relativa alla geometria, lato y;
+- E0, E2 --> dimensioni frattali, calcolabili in un secondo momento con gli algoritmi a disposizione.
 
-          - nomi file: "fd_sum_datasetsData_Time_UniqueCode.csv"; --> file contenente l'esito delle dimensioni frattali su "avg_area", "avg_side_length_0", "avg_side_length_1"
-                       "fd_rqR_datasetsData_Time_UniqueCode.csv". --> file contenente l'esito delle dimensioni frattali su "cardinality", "executionTime", "mbrTests"
 
-**indexes** --> cartella contenente gli indici spaziali generati corrsipondenti a ciascun dataset, divisi in cartelle.
+**1.2 Effettiva generazione dei dataset**
 
-          - nomi cartelle L.1: "datasetsData_Time_UniqueCode"; --> cartella contenente gli indici spaziali dei datasets generati in "Data", "Time" con "UniqueCode"
-          - nomi cartelle L.2: "datasetNumber_spatialIndex";   --> cartella contenente l'indice spaziale di "datasetNumber"
-          - nomi file: "part-number.csv";                      --> file contenente le geometrie della partizione "number"
-                       "_master.rsgrove".                      --> file contenente un recap delle singole partizioni generate con info su ciascuna
+Il prossimo passo riguarda l'effettiva generazione dei dataset che sfrutta il tool [SpiderWeb](https://spider.cs.ucr.edu/). In linea generale, modificare nel codice '*GeneratorCSV.py*' i campi '*folder_groupDataset*' e '*file_nameSummaries*' con, rispettivamente, il nome della cartella in cui verranno salvati i file ('*datasetData_Time_UniqueCode*') e il nome del sommario di partenza ('*sum_datasetData_Time_UniqueCode.csv*'). Lo script in questione, una volta lanciato, sfrutterà i dati presenti nel sommario e lancerà lo script '*Generator.py*' che procederà alla generazione dei dataset. Questi, verranno salvati nel percorso '*datasets/datasetData_Time_UniqueCode*'. Nella cartella verrà inserito anche un file corrispondente ai comandi completi lanciati per la generazione dei dataset ('*commands.log*'). Struttura dei file '*datasetNumber.ext*':
+- point: due colonne contenenti x e y dei punti (x, y) --> formato file *.csv*;
+- box: quattro colonne contenenti x e y del punto in basso a sinistra e in alto a destra delle box (x1, y1, x2, y2) --> formato file *.csv*;
+- polygon: ogni geometria è scritta come 'POLYGON((x1 y1,x2 y2,x3 y3,x4 y4,x5 y5,x1 y1))' --> formato file *.wkt*.
 
-**rangeQueriesInputs** --> cartella contenente i file con le Range Queries da applicare.
 
-          - nomi file: "rqI_datasetsData_Time_UniqueCode.csv". --> file contenente le Range Queries da applicare al gruppo di datasets generati in "Data", "Time" con "UniqueCode"
+## STEP 2 - Primo calcolo delle dimensioni frattali
+**2.1 Dimensione frattale sulla distribuzione del dataset**
 
-**rangeQueriesResult** --> cartella contenente i file con i risultati delle Range Queries ("cardinality", "executionTime", "mbrTests").
+Dopo la generazione dei dataset, si procede al calcolo della dimensione frattale sulla distribuzione delle geometrie relativa a ciascun dataset generato nel sommario. Per calcolare questi valori, viene usato lo script implementato nel file '*fractalDimension.py*' (files di supporto per lo scambio di informazioni Front-end <--> Back-end: '*fdParameters.csv*' e '*fdSupport.csv*'). Per procedere al corretto calcolo della dimensione frattale in questione, si visioni nella cartella '*fd_casi*' i files '*fdSupport_general.csv*' e '*fdSupport_caseA.csv*'.
 
-          - nomi file: "rqR_datasetsData_Time_UniqueCode.csv". --> file contenente gli esiti delle Range Queries del gruppo di datasets generati in "Data", "Time" con "UniqueCode"
+I valori che può assumere il calcolo di questo parametro variano da 0 a 2. Se si avvicina a 2, allora la distribuzione delle geometrie è abbastanza uniforme. Se si avvicina a 1, allora la distribuzione delle geometrie è pressocchè lineare.
 
-**src** --> cartella contenente due script fondamentali per il processo di Augmentation. Inseriti nel seguente modo per l'uso di SBT.
+Il calcolo corretto della dimensione frattale relativo a ciascun dataset selezionato, viene inserito nella colonna '*E2*' del file '*sum_datasetData_Time_UniqueCode.csv*'.
 
-**summaries** --> cartella contenente i file con le principali caratteristiche dei dataset.
+**2.2 Dimensione frattale sui parametri del sommario**
 
-          - nomi file: "sum_datasetsData_Time_UniqueCode.csv". --> file contenente le caratteristiche del gruppo di datasets generati in "Data", "Time" con "UniqueCode"
+Successivamente si procede al calcolo della dimensione frattale relative ai campi '*avg_area*', '*avg_side_length_0*', '*avg_side_length_1*' e '*E2*' del sommario. Per calcolare questi valori, viene usato lo script implementato nel file '*fractalDimension.py*' (files di supporto per lo scambio di informazioni Front-end <--> Back-end: '*fdParameters.csv*' e '*fdSupport.csv*'). Per procedere al corretto calcolo delle dimensioni frattali in questione, si visioni nella cartella '*fd_casi*' i files '*fdSupport_general.csv*' e '*fdSupport_caseB.csv*'.
 
-**trainingSets** --> cartella contenente tutti i training set divisi per ciascun gruppo di dataset.
+Il calcolo corretto delle dimensioni frattali relativo a ciascun parametro selezionato, viene inserito nel file '*fd_sum_datasetData_Time_UniqueCode.csv*' presente nella cartella '*fd*'. Questo file è composto da due righe :
+- prima riga (header) --> '*avg_area;avg_side_length_0;avg_side_length_1;E2*';
+- seconda riga (values) --> '*fd_avgArea;fd_avgSideLength0;fd_avgSideLength1;fd_E2*'.
 
-          - nomi cartelle L.1: "datasetsData_Time_UniqueCode";
-          - nomi cartelle L.2: "training_set_number" e "training_set_number_diff";
-          - nomi file: "bin_datasetsData_Time_UniqueCode_ts.csv";    --> bin associati al parametro categorizzato
-                       "fd_sum_datasetsData_Time_UniqueCode.csv";    --> dimensioni frattali sui parametri "avg_area", "avg_side_length_0", "avg_side_length_1"
-                       "fd_rqR_datasetsData_Time_UniqueCode.csv";    --> dimensioni frattali sui parametri "cardinality", "executionTime", "mbrTests" (prima "augmentation")
-                       "fd_rqR_datasetsData_Time_UniqueCode_ts.csv"; --> dimensioni frattali sui parametri "cardinality", "executionTime", "mbrTests" (dopo "augmentation")
-                       "input.csv";                                  --> file di input dell'utente con specifiche sull'applicazione di "augmentation"
-                       "rqR_datasetsData_Time_UniqueCode_ts.csv";    --> risultati delle Range Queries correlate al gruppo di dataset in analisi
-                       "sum_datasetsData_Time_UniqueCode_ts.csv";    --> principali caratteristiche dei dataset in analisi
-                       "new_datasets.csv".                           --> principali caratteristiche dei nuovi dataset generati con le tecniche di augmentation
 
-## SCRIPT
-**generator.py - generator.sh** --> script col compito di generare i dataset presenti in "summaries/sum_datasetsData_Time_UniqueCode.csv".
+## STEP 3 - Partizionamento dei dataset e generazione dell'indice spaziale
 
-**indexApp.scala** --> script che genera gli indici spaziali del gruppo di dataset richiesti (input file: "indexParameters.csv").
+A questo punto, si procede con il partizionamento dei dataset con correlata generazione di un indice spaziale. Questo permette un miglioramento in termini di efficienza ed efficacia degli script richiamati nell'intero processo. L'algoritmo di partizionamento implementato è il Quad Tree (continua divisione delle partizioni in quattro fino al raggiungimento di determinati limiti prestabiliti) e sfrutta tecniche di parallelismo sulla generazione delle partizioni su diversi dataset contemporaneamente.
 
-**rangeQueryApp.scala** --> script che effettua le range queries correlate al dataset richiesto (input file: "rangeParameters.csv").
+L'utente può scegliere di partizionare in tre modi diversi:
+- definire il numero di partizioni minime che si vogliono generare;
+- definire il numero di geometrie massime che ogni partizione deve contenere;
+- definire il peso massimo (in bytes) che le partizioni devono pesare.
 
-**rank_with_diff.py** --> script che genera i bin del parametro scelto da categorizzare (input file: "rankParameters.csv").
+Per l'applicazione di questo step viene eseguito il file '*Indexing.py*' che usa, come file di supporto per lo scambio di informazioni tra Front-end e Back-end, il file '*indexParameters.csv*'. Quest'ultimo è composto dai seguenti campi:
+- pathDatasets --> percorso completo contenente i dataset da partizionare ('*datasets/datasetData_Time_UniqueCode*');
+- nameDataset --> nome del dataset da partizionare ('*datasetNumber.ext*');
+- pathIndexes --> cartella dove salvare l'indice spaziale con le partizioni del dataset in analisi ('*indexes*');
+- typePartition --> tipo di partizione scelta dall'utente da effettuare ('*partitions*', '*geometries*' o '*bytes*');
+- num --> numero che prende valore in base al tipo di partizione scelto.
 
-**augmentation.py** --> script che applica le tecniche di augmentation sul gruppo di dataset in analisi (input file: "augmentationParameters.csv").
+Una volta effettuata la partizione, i risultati vengono inseriti nella cartella '*indexes/datasetData_Time_UniqueCode*' in cui vengono generate, per ogni dataset partizionato, una cartella '*datasetNumber_spatialIndex*' in cui vengono inserite le partizioni generate ('*partition_0.ext*', '*partition_1*' ...) e un file contenente l'indice spaziale ('*master_table.csv*'). Quest'ultimo è composto dai seguenti campi:
+- ID --> codice identificativo numerico della partizione;
+- NamePartition --> nome della partizione ('*partition_number.ext*');
+- NumberGeometries --> numero di geometrie appartenenti alla partizione;
+- FileSize --> dimensione in bytes della partizione;
+- GeometryType --> tipo di geometria contenuta nella partizione;
+- xMin, yMin, xMax, yMax --> dimensioni della finestra relativa alla partizione.
 
-**fractalDimension.py** --> script che calcola le dimensioni spaziali su parametri passati dall'utente (input file: "fdParameters.csv").
+## STEP 4 - Applicazione delle Range Queries
+**4.1 Preparazione delle Range Queries**
 
-## FILE PER L'USO DEGLI SCRIPT
-**indexParameters.csv** --> header: "pathDatasets;nameDataset;pathIndexes;typePartition;num"
+Per procedere con l'applicazione delle Range Queries, si deve prima scrivere le Queries da applicare. Per fare ciò, si costruisce un file nominato '*rqI_datasetData_Time_UniqueCode.csv*'. Ogni sommario avrà il suo file con all'interno le Range Queries correlate a ciascun dataset del sommario. Questo viene salvato in una cartella '*rangeQueriesInput*'. Il file è composto dai seguenti campi:
+- datasetName --> nome del dataset su cui applicare la query in questione ('*datasetNumber*');
+- numQuery --> numero identificativo della query in questione;
+- queryArea --> area di query;
+- minX, minY, maxX, maxY --> dimensioni della finestra di query;
+- areaint --> area della query effettivamente interna al dataset.
 
-          - pathDatasets = cartella in cui trovare il dataset da partizionare ("datasets/datasetsData_Time_UniqueCode");
-          - nameDataset = nome del dataset da partizionare ("datasetNumber.extension");
-          - pathIndexes = cartella in cui salvare l'indice spaziale ("indexes");
-          - typePartition = tipo di partizionamento possibile ("partitions", "geometries" o "bits");
-          - num = numero correlato al tipo di partizionamento scelto ("number_partitions", "number_geometries" o "number_bits").
+**4.2 Effettiva applicazione delle Range Queries**
 
-**rangeParameters.csv** --> header: "pathDatasets;nameDataset;pathSummaries;nameSummary;pathIndexes;pathRangeQueries;nameRangeQueries"
+Una volta stabilite le queries, si procede con l'applicazione di quest'ultime tramite l'esecuzione dello script '*RangeQuery.py*'. Tale programma sfrutta l'indice spaziale per effettuare la query solo sulle partizioni interessate alla query stessa. Inoltre, sfrutta tecniche di parallelismo per effettuare l'analisi in contemporanea delle partizioni interessate. Al termine del processo, viene generato un file di output ('*rqR_datasetData_Time_UniqueCode.csv*'), salvato nella cartella '*rangeQueriesResult*', dove sono presenti per ciascuna query i valori risultanti di quest'ultima. Di seguito vengono riportati i valori calcolati:
+- *cardinality* --> numero di geometrie nella finestra di query rapportato al numero di geometrie totali del dataset;
+- *mbrTests* --> numero di confronti eseguiti sulle geometrie per l'esecuzione della query;
+- *averageExecutionTime* --> tempo medio di esecuzione dei threads attivati per l'esecuzione della query;
+- *numberParallelThreads* --> numero di threads instanziati per l'esecuzione della query;
+- *totalExecutionTime* --> tempo totale impiegato per l'esecuzione della query (circa il prodotto tra *averageExecutionTime* e *numberParallelThreads*).
 
-          - pathDatasets = cartella in cui trovare il dataset selezionato ("datasets/datasetsData_Time_UniqueCode");
-          - nameDataset = nome del dataset selezionato ("datasetNumber.extension");
-          - pathSummaries = cartella in cui trovare i sommari dei datasets ("summaries");
-          - nameSummary = file in cui trovare il sommario del dataset selezionato ("sum_datasetsData_Time_UniqueCode.csv");
-          - pathIndexes = cartella in cui trovare l'indice spaziale del dataset selezionato ("indexes/datasetsData_Time_UniqueCode/datasetNumber_spatialIndex");
-          - pathRangeQueries = cartella in cui trovare le range queries correlate al dataset selezionato ("rangeQueriesInputs");
-          - nameRangeQueries = file in cui trovare le range queries correlate al dataset selezionato ("rqI_datasetsData_Time_UniqueCode.csv").
+Per avviare lo script in questione, viene richiesta la compilazione del file '*rangeParameters.csv*' necessario per il corretto scambio di informazioni tra Front-end e Back-end. Questo presenta i seguenti campi:
+- pathDatasets;nameDataset;pathSummaries;nameSummary;pathIndexes;pathRangeQueries;nameRangeQueries
 
-**rankParameters.csv** --> header: "parameterCategorized;numberIntervals;pathRangeQueriesResult;nameRangeQueriesResult;pathSummaries;nameSummary;pathFD;nameFD"
 
-          - parameterCategorized = parametro che si vuole categorizzare ("cardinality", "executionTime" o "mbrTests");
-          - numberIntervals = numero di intervalli che si vogliono generare ("number");
-          - pathRangeQueriesResult = cartella in cui trovare i risultati delle range queries ("rangeQueriesResult");
-          - nameRangeQueriesResult = file in cui trovare i risultati delle range queries ("rqR_datasetsData_Time_UniqueCode.csv");
-          - pathSummaries = cartella in cui trovare i sommari dei datasets ("summaries");
-          - nameSummary = file in cui trovare il sommario del dataset selezionato ("sum_datasetsData_Time_UniqueCode.csv");
-          - pathFD = cartella in cui trovare i file correlati agli indici spaziali ("fd");
-          - nameFD = nomi dei file da inserire all'inetrno del training set correlati agli indici spaziali ("fd_sum_datasetsData_Time_UniqueCode.csv;fd_rqR_datasetsData_Time_UniqueCode.csv").
+## STEP 5 - Calcolo della dimensione frattale sui parametri risultanti delle Range Queries
 
-**augmentationParameters.csv** --> header: "pathTrainingSet;nameBin;nameSummary;nameRangeQueriesResult;nameInputs;pathDatasets;pathIndexes"
 
-          - pathTrainingSet = cartella contenente l'insieme di file utili per l'augmentation del set scelto ("trainingSets/datasetsData_Time_UniqueCoede/training_set_number");
-          - nameBin = file contenente i bin relativi al set scelto ("bin_datasetsData_Time_UniqueCode_ts.csv");
-          - nameSummary = file contenente il sommario dei datasets appartenenti al set scelto ("sum_datasetsData_Time_UniqueCode_ts.csv");
-          - nameRangeQueriesResult = file contenente i risultati delle range queries correlate al set scelto ("rqR_datasetsData_Time_UniqueCode_ts.csv");
-          - nameInputs = file contenente gli input dell'utente ("input.csv");
-          - pathDatasets = cartella contenente i datasets relativi al set selezionato ("datasets/datasetsData_Time_UniqueCode");
-          - pathIndexes = cartella contenente gli indici spaziali dei datasets relativi al set selezionato ("indexes/datasetsData_Time_UniqueCode").
 
-**fdParameters.csv** --> header: "pathDatasets;pathSummary;nameSummary;pathRangeQuery_ts;nameRangeQuery_ts;fromX;toX;pathFD;pathFD_ts;parameters"
 
-          - pathDatasets = cartella contenente i datasets generati ("datasets/datasetsData_Time_UniqueCode");
-          - pathSummary = cartella contenente i sommari dei datasets ("summaries");
-          - nameSummary = file contenente il sommario dei datasets richiesti ("sum_datasetsData_Time_UniqueCode.csv");
-          - pathRangeQuery_ts = cartella contenente le range queries ("rangeQueriesResult" o "trainingSets/datasetsData_Time_UniqueCode/training_set_number");
-          - nameRangeQuery_ts = file contenente le range queries richieste ("rqR_datasetsData_Time_UniqueCode.csv");
-          - fromX = numero dataset da cui partire ("number");
-          - toX = numero ultimo dataset ("number");
-          - pathFD = dove salvare il risultato del calcolo della dimensione frattale ("fd");
-          - pathFD_ts = dove salvare il risultato del calcolo della dimensione frattale ("trainingSets/datasetsData_Time_UniqueCode/training_set_number" o "fd");
-          - parameters = parametri su cui calcolare la dimensione frattale ("distribution", "avg_area", "avg_side_length_0", "avg_side_length_1", "cardinality", "executionTime" o "mbrTests").
+
+## STEP 6 - Studio del bilanciamento dei parametri risultanti delle Range Queries
+
+
+
+
+
+## STEP 7 - Applicazione delle tecniche di Augmentation
+
+
+
+
+## STEP 8 - Calcolo della dimensione frattale sui parametri risultanti delle Range Queries dopo l'Augmentation
+
+
+
+
