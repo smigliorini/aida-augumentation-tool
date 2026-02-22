@@ -89,14 +89,21 @@ Una volta stabilite le queries, si procede con l'applicazione di quest'ultime tr
 - *totalExecutionTime* --> tempo totale impiegato per l'esecuzione della query (circa il prodotto tra *averageExecutionTime* e *numberParallelThreads*).
 
 Per avviare lo script in questione, viene richiesta la compilazione del file '*rangeParameters.csv*' necessario per il corretto scambio di informazioni tra Front-end e Back-end. Questo presenta i seguenti campi:
-- pathDatasets;nameDataset;pathSummaries;nameSummary;pathIndexes;pathRangeQueries;nameRangeQueries
+- pathDatasets --> percorso completo contenente il dataset su cui applicare le rispettive queries ('*datasets/datasetData_Time_UniqueCode*');
+- nameDataset --> nome del dataset su cui applicare le rispettive queries ('*datasetNumber.ext*');
+- pathSummaries --> percorso completo contenente il sommario correlato al gruppo di datasets in cui si trova il dataset in questione ('*summaries*');
+- nameSummary --> nome del sommario correlato al gruppo di datasets in cui si trova il dataset in questione ('*sum_datasetData_Time_UniqueCode.csv*');
+- pathIndexes --> percorso completo contenente l'indice spaziale e le partizioni correlate al dataset in questione ('*indexes/datasetData_Time_UniqueCode/datasetNumber_spatialIndex*');
+- pathRangeQueries --> percorso in cui è presente il file contenente le queries da applicare al dataset in questione ('*rangeQueriesInput*');
+- nameRangeQueries --> nome del file contenente le queries da applicare al dataset in questione ('*rqI_datasetData_Time_UniqueCode.csv*').
 
+## STEP 5 - Calcolo della dimensione frattale sui parametri risultanti delle Queries
 
-## STEP 5 - Calcolo della dimensione frattale sui parametri risultanti delle Range Queries
+Successivamente si procede al calcolo della dimensione frattale relative ai campi '*cardinality*', '*mbrTests*', e '*totalExecutionTime*' ricavati dall'applicazione delle queries. Per calcolare questi valori, viene usato lo script implementato nel file '*fractalDimension.py*' (files di supporto per lo scambio di informazioni Front-end <--> Back-end: '*fdParameters.csv*' e '*fdSupport.csv*'). Per procedere al corretto calcolo delle dimensioni frattali in questione, si visioni nella cartella '*fd_casi*' i files '*fdSupport_general.csv*' e '*fdSupport_caseC.csv*'.
 
-
-
-
+Il calcolo corretto delle dimensioni frattali relativo a ciascun parametro selezionato, viene inserito nel file '*fd_rqR_datasetData_Time_UniqueCode.csv*' presente nella cartella '*fd*'. Questo file è composto da due righe :
+- prima riga (header) --> '*cardinality;mbrTests;totalExecutionTime*';
+- seconda riga (values) --> '*fd_cardinality;fd_mbrTests;fd_totalExecutionTime*'.
 
 ## STEP 6 - Studio del bilanciamento dei parametri risultanti delle Range Queries
 
@@ -109,8 +116,73 @@ Per avviare lo script in questione, viene richiesta la compilazione del file '*r
 
 
 
-## STEP 8 - Calcolo della dimensione frattale sui parametri risultanti delle Range Queries dopo l'Augmentation
+## STEP 8 - Calcolo della dimensione frattale sui parametri delle Queries dopo l'Augmentation
 
+Infine, si procede al calcolo della dimensione frattale relative ai nuovi campi '*cardinality*', '*mbrTests*', e '*totalExecutionTime*' dopo l'applicazione delle tecniche di Augmentation. Per calcolare questi valori, viene usato lo script implementato nel file '*fractalDimension.py*' (files di supporto per lo scambio di informazioni Front-end <--> Back-end: '*fdParameters.csv*' e '*fdSupport.csv*'). Per procedere al corretto calcolo delle dimensioni frattali in questione, si visioni nella cartella '*fd_casi*' i files '*fdSupport_general.csv*' e '*fdSupport_caseD.csv*'.
 
+Il calcolo corretto delle dimensioni frattali relativo a ciascun parametro selezionato, viene inserito nel file '*fd_rqR_datasetData_Time_UniqueCode_ts.csv*' presente nella cartella '*trainingSets/datasetData_Time_UniqueCode/training_set_number*'. Questo file è composto da due righe :
+- prima riga (header) --> '*cardinality;mbrTests;totalExecutionTime*';
+- seconda riga (values) --> '*fd_cardinalityNew;fd_mbrTestsNew;fd_totalExecutionTimeNew*'.
 
+#
+## PROGETTO - FILE E CARTELLE
 
+    [AIDA]
+    |
+    |-- [datasets]
+    |   |-- [datasetDate_Time_UniqueCode]
+    |       |-- commands.log
+    |       |-- datasetNumber.ext
+    |
+    |-- [datasetsAugmentation]
+    |   |-- [datasetDate_Time_UniqueCode]
+    |       |-- [training_set_number]
+    |           |-- datasetNumber_tecnique.ext
+    |           |-- ...
+    |
+    |-- [fd]
+    |   |-- fd_sum_datasetDate_Time_UniqueCode.csv
+    |   |-- fd_rqR_datasetDate_Time_UniqueCode.csv
+    |
+    |-- [indexes]
+    |   |-- [datasetDate_Time_UniqueCode]
+    |       |-- [datasetNumber.ext]
+    |           |-- master_table.csv
+    |           |-- partition-number.ext
+    |           |-- ...
+    |
+    |-- [rangeQueriesInput]
+    |   |-- rqI_datasetDate_Time_UniqueCode.csv
+    |
+    |-- [rangeQueriesOutput]
+    |   |-- rqR_datasetDate_Time_UniqueCode.csv
+    |
+    |-- [summaries]
+    |   |-- sum_datasetDate_Time_UniqueCode.csv
+    |
+    |-- [trainingSets]
+    |   |-- [datasetDate_Time_UniqueCode]
+    |       |-- [training_set_number]
+    |       |   |-- bin_datasetDate_Time_UniqueCode_ts.csv
+    |       |   |-- fd_rqR_datasetDate_Time_UniqueCode_ts.csv
+    |       |   |-- fd_rqR_datasetDate_Time_UniqueCode.csv
+    |       |   |-- input.csv
+    |       |   |-- new_dataset.csv
+    |       |   |-- rqR_datasetDate_Time_UniqueCode_ts.csv
+    |       |   |-- sum_datasetDate_Time_UniqueCode_ts.csv
+    |       |
+    |       |-- [training_set_number_diff]
+    |
+    |-- augmentation.py
+    |-- augmentationParameters.csv
+    |-- fdParameters.csv
+    |-- fdSupport.csv
+    |-- fractalDimension.py
+    |-- Generator.py
+    |-- GeneratorCSV.py
+    |-- Indexing.py
+    |-- indexParameters.csv
+    |-- rank_with_diff.py
+    |-- rankParameters.csv
+    |-- rangeParameters.csv
+    |-- RangeQuery.py
