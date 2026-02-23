@@ -30,7 +30,7 @@ Il prossimo passo riguarda l'effettiva generazione dei dataset che sfrutta il to
 ## STEP 2 - Primo calcolo delle dimensioni frattali
 **2.1 Dimensione frattale sulla distribuzione del dataset**
 
-Dopo la generazione dei dataset, si procede al calcolo della dimensione frattale sulla distribuzione delle geometrie relativa a ciascun dataset generato nel sommario. Per calcolare questi valori, viene usato lo script implementato nel file '*fractalDimension.py*' (files di supporto per lo scambio di informazioni Front-end <--> Back-end: '*fdParameters.csv*' e '*fdSupport.csv*'). Per procedere al corretto calcolo della dimensione frattale in questione, si visioni nella cartella '*fd_casi*' i files '*fdSupport_general.csv*' e '*fdSupport_caseA.csv*'.
+Dopo la generazione dei dataset, si procede al calcolo della dimensione frattale sulla distribuzione delle geometrie relativa a ciascun dataset generato nel sommario. Per calcolare questi valori, viene usato lo script implementato nel file '*FractalDimension.py*' (files di supporto per lo scambio di informazioni Front-end <--> Back-end: '*fdParameters.csv*' e '*fdSupport.csv*'). Per procedere al corretto calcolo della dimensione frattale in questione, si visioni nella cartella '*fd_casi*' i files '*fdSupport_general.csv*' e '*fdSupport_caseA.csv*'.
 
 I valori che può assumere il calcolo di questo parametro variano da 0 a 2. Se si avvicina a 2, allora la distribuzione delle geometrie è abbastanza uniforme. Se si avvicina a 1, allora la distribuzione delle geometrie è pressocchè lineare.
 
@@ -38,7 +38,7 @@ Il calcolo corretto della dimensione frattale relativo a ciascun dataset selezio
 
 **2.2 Dimensione frattale sui parametri del sommario**
 
-Successivamente si procede al calcolo della dimensione frattale relative ai campi '*avg_area*', '*avg_side_length_0*', '*avg_side_length_1*' e '*E2*' del sommario. Per calcolare questi valori, viene usato lo script implementato nel file '*fractalDimension.py*' (files di supporto per lo scambio di informazioni Front-end <--> Back-end: '*fdParameters.csv*' e '*fdSupport.csv*'). Per procedere al corretto calcolo delle dimensioni frattali in questione, si visioni nella cartella '*fd_casi*' i files '*fdSupport_general.csv*' e '*fdSupport_caseB.csv*'.
+Successivamente si procede al calcolo della dimensione frattale relative ai campi '*avg_area*', '*avg_side_length_0*', '*avg_side_length_1*' e '*E2*' del sommario. Per calcolare questi valori, viene usato lo script implementato nel file '*FractalDimension.py*' (files di supporto per lo scambio di informazioni Front-end <--> Back-end: '*fdParameters.csv*' e '*fdSupport.csv*'). Per procedere al corretto calcolo delle dimensioni frattali in questione, si visioni nella cartella '*fd_casi*' i files '*fdSupport_general.csv*' e '*fdSupport_caseB.csv*'.
 
 Il calcolo corretto delle dimensioni frattali relativo a ciascun parametro selezionato, viene inserito nel file '*fd_sum_datasetData_Time_UniqueCode.csv*' presente nella cartella '*fd*'. Questo file è composto da due righe :
 - prima riga (header) --> '*avg_area;avg_side_length_0;avg_side_length_1;E2*';
@@ -99,7 +99,7 @@ Per avviare lo script in questione, viene richiesta la compilazione del file '*r
 
 ## STEP 5 - Calcolo della dimensione frattale sui parametri risultanti delle Queries
 
-Successivamente si procede al calcolo della dimensione frattale relative ai campi '*cardinality*', '*mbrTests*', e '*totalExecutionTime*' ricavati dall'applicazione delle queries. Per calcolare questi valori, viene usato lo script implementato nel file '*fractalDimension.py*' (files di supporto per lo scambio di informazioni Front-end <--> Back-end: '*fdParameters.csv*' e '*fdSupport.csv*'). Per procedere al corretto calcolo delle dimensioni frattali in questione, si visioni nella cartella '*fd_casi*' i files '*fdSupport_general.csv*' e '*fdSupport_caseC.csv*'.
+Successivamente si procede al calcolo della dimensione frattale relative ai campi '*cardinality*', '*mbrTests*', e '*totalExecutionTime*' ricavati dall'applicazione delle queries. Per calcolare questi valori, viene usato lo script implementato nel file '*FractalDimension.py*' (files di supporto per lo scambio di informazioni Front-end <--> Back-end: '*fdParameters.csv*' e '*fdSupport.csv*'). Per procedere al corretto calcolo delle dimensioni frattali in questione, si visioni nella cartella '*fd_casi*' i files '*fdSupport_general.csv*' e '*fdSupport_caseC.csv*'.
 
 Il calcolo corretto delle dimensioni frattali relativo a ciascun parametro selezionato, viene inserito nel file '*fd_rqR_datasetData_Time_UniqueCode.csv*' presente nella cartella '*fd*'. Questo file è composto da due righe :
 - prima riga (header) --> '*cardinality;mbrTests;totalExecutionTime*';
@@ -118,7 +118,7 @@ Il calcolo corretto delle dimensioni frattali relativo a ciascun parametro selez
 
 ## STEP 8 - Calcolo della dimensione frattale sui parametri delle Queries dopo l'Augmentation
 
-Infine, si procede al calcolo della dimensione frattale relative ai nuovi campi '*cardinality*', '*mbrTests*', e '*totalExecutionTime*' dopo l'applicazione delle tecniche di Augmentation. Per calcolare questi valori, viene usato lo script implementato nel file '*fractalDimension.py*' (files di supporto per lo scambio di informazioni Front-end <--> Back-end: '*fdParameters.csv*' e '*fdSupport.csv*'). Per procedere al corretto calcolo delle dimensioni frattali in questione, si visioni nella cartella '*fd_casi*' i files '*fdSupport_general.csv*' e '*fdSupport_caseD.csv*'.
+Infine, si procede al calcolo della dimensione frattale relative ai nuovi campi '*cardinality*', '*mbrTests*', e '*totalExecutionTime*' dopo l'applicazione delle tecniche di Augmentation. Per calcolare questi valori, viene usato lo script implementato nel file '*FractalDimension.py*' (files di supporto per lo scambio di informazioni Front-end <--> Back-end: '*fdParameters.csv*' e '*fdSupport.csv*'). Per procedere al corretto calcolo delle dimensioni frattali in questione, si visioni nella cartella '*fd_casi*' i files '*fdSupport_general.csv*' e '*fdSupport_caseD.csv*'.
 
 Il calcolo corretto delle dimensioni frattali relativo a ciascun parametro selezionato, viene inserito nel file '*fd_rqR_datasetData_Time_UniqueCode_ts.csv*' presente nella cartella '*trainingSets/datasetData_Time_UniqueCode/training_set_number*'. Questo file è composto da due righe :
 - prima riga (header) --> '*cardinality;mbrTests;totalExecutionTime*';
@@ -177,7 +177,7 @@ Il calcolo corretto delle dimensioni frattali relativo a ciascun parametro selez
     |-- augmentationParameters.csv
     |-- fdParameters.csv
     |-- fdSupport.csv
-    |-- fractalDimension.py
+    |-- FractalDimension.py
     |-- Generator.py
     |-- GeneratorCSV.py
     |-- Indexing.py
