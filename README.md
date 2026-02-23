@@ -166,12 +166,18 @@ Il calcolo corretto delle dimensioni frattali relativo a ciascun parametro selez
     |       |   |-- bin_datasetDate_Time_UniqueCode_ts.csv
     |       |   |-- fd_rqR_datasetDate_Time_UniqueCode_ts.csv
     |       |   |-- fd_rqR_datasetDate_Time_UniqueCode.csv
+    |       |   |-- fd_sum_datasetDate_Time_UniqueCode.csv
     |       |   |-- input.csv
     |       |   |-- new_dataset.csv
     |       |   |-- rqR_datasetDate_Time_UniqueCode_ts.csv
     |       |   |-- sum_datasetDate_Time_UniqueCode_ts.csv
     |       |
     |       |-- [training_set_number_diff]
+    |       |   |-- bin_datasetDate_Time_UniqueCode_diff.csv
+    |       |   |-- fd_rqR_datasetDate_Time_UniqueCode.csv
+    |       |   |-- fd_sum_datasetDate_Time_UniqueCode.csv
+    |       |   |-- rqR_datasetDate_Time_UniqueCode_diff.csv
+    |       |   |-- sum_datasetDate_Time_UniqueCode_diff.csv
     |
     |-- augmentation.py
     |-- augmentationParameters.csv
