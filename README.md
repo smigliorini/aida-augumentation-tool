@@ -107,9 +107,17 @@ Il calcolo corretto delle dimensioni frattali relativo a ciascun parametro selez
 
 ## STEP 6 - Studio del bilanciamento dei parametri risultanti delle Range Queries
 
+In questo step, si vuole studiare il bilanciamento attuale del set in analisi di dataset e relative queries. In generale, si individuano i valori massimi dei parametri calcolati per ciascuna query e, in base a quanti intervalli vogliono essere costruiti (scelti dall'utente), vengono generati i bin corrispondenti e restituito il numero di queries per ciascun bin realizzato. Inoltre, viene generata la cartella "training_set" su cui poter lavorare con le tecniche di augmentation per il miglioramento del set in questione.
 
-
-
+Per fare ciò, viene eseguito lo script '*ConstructionOfBin.py*' e, per il corretto funzionamento, viene richiesta la compilazione del file '*binParameters.csv*' necessario per il corretto scambio di informazioni tra Front-end e Back-end. Questo presenta i seguenti campi:
+- parameterCategorized --> Parametro da categorizzare;
+- numberIntervals --> Numero di Bins da generare;
+- pathRangeQueriesResult --> Percorso in cui trovare i risultati delle range querie;
+- nameRangeQueriesResult --> Nome del file in cui ci sono i risultati delle range queries;
+- pathSummaries --> Percorso in cui trovare i sommari sui dataset;
+- nameSummary --> Nome del file in cui ci sono i sommari sui dataset;
+- pathFD --> Percorso dove trovare le dimansioni frattali calcolate;
+- nameFD --> Nomi dei file contenenti le dimensioni frattali.
 
 ## STEP 7 - Applicazione delle tecniche di Augmentation
 
@@ -163,24 +171,19 @@ Il calcolo corretto delle dimensioni frattali relativo a ciascun parametro selez
     |-- [trainingSets]
     |   |-- [datasetDate_Time_UniqueCode]
     |       |-- [training_set_number]
-    |       |   |-- bin_datasetDate_Time_UniqueCode_ts.csv
-    |       |   |-- fd_rqR_datasetDate_Time_UniqueCode_ts.csv
-    |       |   |-- fd_rqR_datasetDate_Time_UniqueCode.csv
-    |       |   |-- fd_sum_datasetDate_Time_UniqueCode.csv
-    |       |   |-- input.csv
-    |       |   |-- new_dataset.csv
-    |       |   |-- rqR_datasetDate_Time_UniqueCode_ts.csv
-    |       |   |-- sum_datasetDate_Time_UniqueCode_ts.csv
-    |       |
-    |       |-- [training_set_number_diff]
-    |       |   |-- bin_datasetDate_Time_UniqueCode_diff.csv
-    |       |   |-- fd_rqR_datasetDate_Time_UniqueCode.csv
-    |       |   |-- fd_sum_datasetDate_Time_UniqueCode.csv
-    |       |   |-- rqR_datasetDate_Time_UniqueCode_diff.csv
-    |       |   |-- sum_datasetDate_Time_UniqueCode_diff.csv
+    |           |-- bin_datasetDate_Time_UniqueCode_ts.csv
+    |           |-- fd_rqR_datasetDate_Time_UniqueCode_ts.csv
+    |           |-- fd_rqR_datasetDate_Time_UniqueCode.csv
+    |           |-- fd_sum_datasetDate_Time_UniqueCode.csv
+    |           |-- input.csv
+    |           |-- new_dataset.csv
+    |           |-- rqR_datasetDate_Time_UniqueCode_ts.csv
+    |           |-- sum_datasetDate_Time_UniqueCode_ts.csv
     |
     |-- augmentation.py
     |-- augmentationParameters.csv
+    |-- binParameters.csv
+    |-- ConstructionOfBin.py
     |-- fdParameters.csv
     |-- fdSupport.csv
     |-- FractalDimension.py
@@ -188,7 +191,6 @@ Il calcolo corretto delle dimensioni frattali relativo a ciascun parametro selez
     |-- GeneratorCSV.py
     |-- Indexing.py
     |-- indexParameters.csv
-    |-- rank_with_diff.py
     |-- rankParameters.csv
     |-- rangeParameters.csv
     |-- RangeQuery.py
