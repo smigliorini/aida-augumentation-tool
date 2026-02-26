@@ -154,7 +154,7 @@ Il calcolo corretto delle dimensioni frattali relativo a ciascun parametro selez
     |
     |-- [indexes]
     |   |-- [datasetDate_Time_UniqueCode]
-    |       |-- [datasetNumber.ext]
+    |       |-- [datasetNumber_spatialIndex]
     |           |-- master_table.csv
     |           |-- partition-number.ext
     |           |-- ...
