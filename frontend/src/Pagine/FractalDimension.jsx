@@ -15,6 +15,8 @@ import { Dialog } from 'primereact/dialog';
 import { ProgressBar } from 'primereact/progressbar';
 import { Message } from 'primereact/message';
 import { SelectButton } from 'primereact/selectbutton';
+import { Chart } from 'primereact/chart';
+import { InputNumber } from 'primereact/inputnumber';
 
 // --- Custom Component Imports ---
 import FractalDimSelector from '../Components/FractalDimSelector';
@@ -52,6 +54,10 @@ function FractalDimension() {
     const [detailedProgress, setDetailedProgress] = useState({ current: 0, total: 0, name: '' });
     const [progressValue, setProgressValue] = useState(0);
 
+    const [intermediateData, setIntermediateData] = useState(null);
+    const [globalStart, setGlobalStart] = useState(0);
+    const [globalEnd, setGlobalEnd] = useState(11);
+
     // --- Static configuration objects ---
     const analysisTypeOptions = [
         { label: 'Input Spatial Distributions (E2)', value: 'distribution' },
@@ -73,9 +79,23 @@ function FractalDimension() {
         socket.on('resource_usage', (data) => { setCpuUsage(data.cpu); setRamUsage(data.ram); });
         socket.on('fractal_dimension_progress', (data) => setProgressMessage(data.message || 'Processing...'));
         
+        socket.on('fractal_dimension_intermediate', (res) => {
+            // Map the data to ensure that start and end have default values (e.g. 0 and dim-1).
+            const mappedData = res.data.map(d => ({
+                ...d,
+                start: d.start !== '' ? parseInt(d.start) : 0,
+                end: d.end !== '' ? parseInt(d.end) : d.dim - 1
+            }));
+            setIntermediateData(mappedData);
+            setIsExecuting(false);
+            setShowProgressDialog(false);
+            toast.current.show({ severity: 'info', summary: 'Data Ready', detail: 'Please select the ranges for the calculation.', life: 4000 });
+        });
+
         socket.on('fractal_dimension_complete', (data) => {
             toast.current.show({ severity: 'success', summary: 'Success', detail: 'Calculation completed. The explorer has been updated.', life: 8000 });
             setIsExecuting(false); 
+            setIntermediateData(null);
             setShowProgressDialog(false);
             // Trigger a refresh in the data explorer component
             setExplorerRefreshKey(prevKey => prevKey + 1);
@@ -246,6 +266,47 @@ function FractalDimension() {
         socket.emit('run_fractal_dimension', payload);
     };
 
+
+    // Set stard/end range to all dataset
+    const applyGlobalRange = () => {
+        if (!intermediateData) return;
+        const updated = intermediateData.map(d => ({ ...d, start: globalStart, end: globalEnd }));
+        setIntermediateData(updated);
+        toast.current.show({ severity: 'success', summary: 'Updated', detail: `Global range [${globalStart}, ${globalEnd}] applied to all.`, life: 2000 });
+    };
+
+    // Set start/end for every single dataset
+    const handleIndividualRangeChange = (index, field, value) => {
+        const updated = [...intermediateData];
+        updated[index][field] = value;
+        setIntermediateData(updated);
+    };
+
+    const handleConfirmFinalCalculation = () => {
+        setIsExecuting(true);
+        setShowProgressDialog(true);
+        setProgressMessage('Calculating final Fractal Dimension...');
+        socket.emit('calculate_final_fd', { intermediateData });
+    };
+
+    // Helper function to generate formatted data for Chart.js
+    const generateChartData = (dataItem) => {
+        return {
+            labels: dataItem.x.map((val, idx) => `Idx ${idx}`), // Abscissa
+            datasets: [{
+                label: `Log-Log Data`,
+                data: dataItem.y,
+                fill: false,
+                borderColor: '#4bc0c0',
+                tension: 0.1,
+                pointBackgroundColor: dataItem.y.map((_, idx) => 
+                    (idx >= dataItem.start && idx <= dataItem.end) ? '#ff5722' : '#4bc0c0' // Highlight the points in the selected range
+                ),
+                pointRadius: 5
+            }]
+        };
+    };
+
     // --- Render ---
     return (
         <div>
@@ -255,78 +316,173 @@ function FractalDimension() {
                 <div className="p-col-12"><h1 className="m-3">Fractal Dimension</h1><Divider /></div>
 
                 <div className="p-col-12 p-md-5">
-                    <div className="flex flex-column gap-3">
-                        {/* --- STEP 1: ANALYSIS TYPE --- */}
-                        <Card title="1. Select Analysis Type">
-                            <Dropdown 
-                                value={analysisType} 
-                                options={analysisTypeOptions} 
-                                onChange={(e) => setAnalysisType(e.value)} 
-                                placeholder="Select an Analysis Type" 
-                                className="w-full"
-                            />
-                            {analysisType === 'range_query' && (
-                                <div className="mt-3">
-                                    <label className="font-bold block mb-2">Select Query Source</label>
-                                    <SelectButton 
-                                        value={rqSource} 
-                                        onChange={(e) => setRqSource(e.value)} 
-                                        options={[
-                                            { label: 'Original Collection (3. Range Query)', value: 'original' },
-                                            { label: 'Augmented Collections (4. Training Set)', value: 'training_set' }
-                                        ]} 
-                                        className="w-full"
-                                    />
-                                </div>
+                    {!intermediateData ? (
+                        <div className="flex flex-column gap-3">
+                            {/* --- STEP 1: ANALYSIS TYPE --- */}
+                            <Card title="1. Select Analysis Type">
+                                <Dropdown 
+                                    value={analysisType} 
+                                    options={analysisTypeOptions} 
+                                    onChange={(e) => setAnalysisType(e.value)} 
+                                    placeholder="Select an Analysis Type" 
+                                    className="w-full"
+                                />
+                                {analysisType === 'range_query' && (
+                                    <div className="mt-3">
+                                        <label className="font-bold block mb-2">Select Query Source</label>
+                                        <SelectButton 
+                                            value={rqSource} 
+                                            onChange={(e) => setRqSource(e.value)} 
+                                            options={[
+                                                { label: 'Original Collection (3. Range Query)', value: 'original' },
+                                                { label: 'Augmented Collections (4. Training Set)', value: 'training_set' }
+                                            ]} 
+                                            className="w-full"
+                                        />
+                                    </div>
+                                )}
+                            </Card>
+
+                            {/* --- STEP 2: SELECT TARGET --- */}
+                            <Card title="2. Select Target">
+                                <FractalDimSelector 
+                                    rootKey={selectorRootKey}
+                                    selectedKey={selectedNode ? selectedNode.key : null}
+                                    onSelect={(e) => handleNodeSelect(e.node)}
+                                    expandedKeys={selectorExpandedKeys}
+                                    onExpansionChange={setSelectorExpandedKeys}
+                                />
+                            </Card>
+
+                            {/* --- STEP 3: CONFIGURE & EXECUTE --- */}
+                            {selectedNode && (
+                                <Card title="3. Configure & Execute">
+                                    <Panel header="Current Selection" toggleable collapsed>
+                                        <p className="m-0" style={{wordBreak: 'break-all'}}><strong>Selected:</strong> {selectedNode.data.path}</p>
+                                    </Panel>
+                                    <div className="mt-3">
+                                        <label htmlFor="params" className="font-bold block mb-2">Parameter(s) to Calculate</label>
+                                        <MultiSelect 
+                                            id="params" 
+                                            value={parametersToRun} 
+                                            options={parameterOptions} 
+                                            onChange={(e) => setParametersToRun(e.value)} 
+                                            placeholder={paramLoading ? "Analyzing file..." : "Select parameter(s)"} 
+                                            display="chip" 
+                                            className="w-full" 
+                                            disabled={analysisType === 'distribution' || paramLoading}
+                                        />
+                                    </div>
+                                    <div className="mt-4">
+                                        <Button 
+                                            label={isExecuting ? 'Calculating...' : 'Run Calculation'} 
+                                            icon="pi pi-play" 
+                                            className="w-full p-button-success" 
+                                            onClick={handleRunScript} 
+                                            disabled={!selectedNode || isExecuting || parametersToRun.length === 0} 
+                                        />
+                                        {error && <Message severity="error" text={error} className="mt-2 w-full" />}
+                                    </div>
+                                </Card>
                             )}
-                        </Card>
-
-                        {/* --- STEP 2: SELECT TARGET --- */}
-                        <Card title="2. Select Target">
-                            <FractalDimSelector 
-                                rootKey={selectorRootKey}
-                                selectedKey={selectedNode ? selectedNode.key : null}
-                                onSelect={(e) => handleNodeSelect(e.node)}
-                                expandedKeys={selectorExpandedKeys}
-                                onExpansionChange={setSelectorExpandedKeys}
-                            />
-                        </Card>
-
-                        {/* --- STEP 3: CONFIGURE & EXECUTE --- */}
-                        {selectedNode && (
-                            <Card title="3. Configure & Execute">
-                                <Panel header="Current Selection" toggleable collapsed>
-                                    <p className="m-0" style={{wordBreak: 'break-all'}}><strong>Selected:</strong> {selectedNode.data.path}</p>
+                        </div>
+                    ) : (
+                        <div className="flex flex-column gap-3">
+                            {/* --- STEP 4: INTERMEDIATE DATA CHART & RANGE SELECTION --- */}
+                            <Card title="4. Select Regression Ranges">
+                                <Panel header="Apply Global Range" toggleable className="mb-4">
+                                    <div className="flex align-items-center gap-3">
+                                        <div className="flex-1">
+                                            <label className="block font-bold mb-1">Global Start</label>
+                                            <InputNumber value={globalStart} onValueChange={(e) => setGlobalStart(e.value)} showButtons min={0} max={globalEnd} className="w-full" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="block font-bold mb-1">Global End</label>
+                                            <InputNumber value={globalEnd} onValueChange={(e) => setGlobalEnd(e.value)} showButtons min={globalStart} className="w-full" />
+                                        </div>
+                                        <div className="flex-none mt-4">
+                                            <Button label="Apply to All" icon="pi pi-check-circle" onClick={applyGlobalRange} />
+                                        </div>
+                                    </div>
                                 </Panel>
-                                <div className="mt-3">
-                                    <label htmlFor="params" className="font-bold block mb-2">Parameter(s) to Calculate</label>
-                                    <MultiSelect 
-                                        id="params" 
-                                        value={parametersToRun} 
-                                        options={parameterOptions} 
-                                        onChange={(e) => setParametersToRun(e.value)} 
-                                        placeholder={paramLoading ? "Analyzing file..." : "Select parameter(s)"} 
-                                        display="chip" 
-                                        className="w-full" 
-                                        disabled={analysisType === 'distribution' || paramLoading}
-                                    />
+
+                                <div style={{ maxHeight: '600px', overflowY: 'auto', overflowX: 'hidden' }} className="pr-2">
+                                    <div className="grid">
+                                        {intermediateData.map((item, index) => {
+                                            const chartData = {
+                                                labels: item.x.map((val, idx) => `Idx ${idx}`),
+                                                datasets: [{
+                                                    label: `Valori Y (Log)`,
+                                                    data: item.y,
+                                                    fill: false,
+                                                    borderColor: '#4bc0c0',
+                                                    tension: 0.1,
+                                                    
+                                                    // START/END in evidenza
+                                                    pointStyle: item.y.map((_, idx) => 
+                                                        (idx === item.start || idx === item.end) ? 'rectRot' : 'circle'
+                                                    ),
+                                                    pointBackgroundColor: item.y.map((_, idx) => 
+                                                        (idx === item.start || idx === item.end) ? '#d32f2f' : 
+                                                        (idx > item.start && idx < item.end) ? '#ff5722' : '#4bc0c0'
+                                                    ),
+                                                    pointRadius: item.y.map((_, idx) => 
+                                                        (idx === item.start || idx === item.end) ? 8 : 4
+                                                    ),
+                                                    pointBorderColor: item.y.map((_, idx) => 
+                                                        (idx === item.start || idx === item.end) ? '#000000' : '#ffffff'
+                                                    ),
+                                                    pointBorderWidth: item.y.map((_, idx) => 
+                                                        (idx === item.start || idx === item.end) ? 2 : 1
+                                                    ),
+                                                    pointHoverRadius: 10
+                                                }]
+                                            };
+
+                                            return (
+                                                <div key={index} className="col-12 md:col-6 xl:col-3">
+                                                    <div className="border-1 surface-border border-round p-2 h-full flex flex-column surface-card">
+                                                        <h6 className="mt-0 mb-2 text-primary overflow-hidden text-overflow-ellipsis white-space-nowrap" title={item.datasetName ? item.datasetName : item.parameter}>
+                                                            {item.datasetName ? item.datasetName : item.parameter}
+                                                        </h6>
+                                                        
+                                                        {/* Contenitore rigido per bloccare i loop di ResizeObserver (Sfarfallio) */}
+                                                        <div style={{ position: 'relative', height: '140px', width: '100%', marginTop: 'auto', marginBottom: '10px' }}>
+                                                            <Chart 
+                                                                type="line" 
+                                                                data={chartData} 
+                                                                options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { display: false } } }} 
+                                                            />
+                                                        </div>
+                                                        
+                                                        <div className="flex flex-column gap-2 mt-auto">
+                                                            <div className="flex align-items-center gap-2">
+                                                                <label className="text-xs font-bold" style={{width: '35px'}}>Start</label>
+                                                                <InputNumber value={item.start} onValueChange={(e) => handleIndividualRangeChange(index, 'start', e.value)} showButtons min={0} max={item.end} inputClassName="p-inputtext-sm w-full" className="flex-1" />
+                                                            </div>
+                                                            <div className="flex align-items-center gap-2">
+                                                                <label className="text-xs font-bold" style={{width: '35px'}}>End</label>
+                                                                <InputNumber value={item.end} onValueChange={(e) => handleIndividualRangeChange(index, 'end', e.value)} showButtons min={item.start} max={item.dim - 1} inputClassName="p-inputtext-sm w-full" className="flex-1" />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
-                                <div className="mt-4">
-                                    <Button 
-                                        label={isExecuting ? 'Calculating...' : 'Run Calculation'} 
-                                        icon="pi pi-play" 
-                                        className="w-full p-button-success" 
-                                        onClick={handleRunScript} 
-                                        disabled={!selectedNode || isExecuting || parametersToRun.length === 0} 
-                                    />
-                                    {error && <Message severity="error" text={error} className="mt-2 w-full" />}
+
+                                <Divider />
+                                <div className="flex gap-2">
+                                    <Button label="Cancel" icon="pi pi-times" className="p-button-outlined p-button-secondary w-full" onClick={() => setIntermediateData(null)} />
+                                    <Button label="Confirm & Calculate FD" icon="pi pi-play" className="p-button-success w-full" onClick={handleConfirmFinalCalculation} />
                                 </div>
                             </Card>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </div>
 
-                <Divider></Divider>
+                <Divider layout="vertical" className="hidden md:flex" />
 
                 {/* --- RESULTS EXPLORER (RIGHT COLUMN) --- */}
                 <div className="p-col-12 p-md-7">
@@ -382,14 +538,6 @@ function FractalDimension() {
                     </div>
                 </div>
             </Dialog>
-
-            {/* <Dialog header="Fractal Dimension Calculation" visible={showProgressDialog} style={{ width: '50vw' }} modal closable={!isExecuting} onHide={() => !isExecuting && setShowProgressDialog(false)}>
-                <div className="flex flex-column gap-3 pt-2">
-                    <div><label className='font-bold'>{progressMessage}</label><ProgressBar mode="indeterminate" style={{ height: '6px' }} className="mt-2" /></div><Divider/>
-                    <div><label>CPU Usage</label><ProgressBar mode="determinate" value={cpuUsage} color="#FFD700" displayValueTemplate={() => `${cpuUsage.toFixed(1)}%`} /></div>
-                    <div><label>RAM Usage</label><ProgressBar mode="determinate" value={ramUsage} color="#87CEFA" displayValueTemplate={() => `${ramUsage.toFixed(1)}%`} /></div>
-                </div>
-            </Dialog> */}
         </div>
     );
 }

@@ -156,10 +156,10 @@ function RangeQuery() {
     };
 
     const downloadCsvTemplate = () => {
-        const csvContent = `datasetName;numQuery;queryArea;minX;minY;maxX;maxY;areaint;cardinality;executionTime;mbrTests;cardinality_class
-dataset1;1;0.02;1.07;5.66;1.09;5.69;0.49;3.07;52;4;0.0-0.031
-dataset1;2;0.03;1.52;6.45;1.53;6.48;0.49;3.29;50;4;0.0-0.0323
-dataset1;3;0.04;0.87;5.80;0.89;5.82;0.49;3.28;43;3;0.0-0.0312`;
+        const csvContent = `datasetName;numQuery;queryArea;minX;minY;maxX;maxY;areaint
+dataset1;1;0.02;1.07;5.66;1.09;5.69;0.49
+dataset1;2;0.03;1.52;6.45;1.53;6.48;0.49
+dataset1;3;0.04;0.87;5.80;0.89;5.82;0.49`;
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);

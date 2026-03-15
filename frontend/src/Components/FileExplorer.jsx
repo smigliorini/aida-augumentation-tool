@@ -335,8 +335,10 @@ useEffect(() => {
             const pw = (part.maxX - part.minX) * k;
             const ph = (part.maxY - part.minY) * k;
 
-            const isMasterView = fileName.toLowerCase().includes('_master') || fileName.toLowerCase().endsWith('.rsgrove');
-            const isActivePart = fileName.includes(part.id.replace('.csv', '')); 
+            const isMasterView = fileName.toLowerCase().includes('master_table') || fileName.toLowerCase().endsWith('.rsgrove');
+            // Extract the base name without extention
+            const activePartBase = part.id.split('.')[0]; 
+            const isActivePart = fileName.includes(activePartBase);
 
             ctx.lineWidth = 1;
 
@@ -467,7 +469,7 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
     };
     
     // --- PARSER FOR MASTER FILE ---
-    // Parses the tab-separated .rsgrove file to extract partition boundaries
+    // Parses the comma-separated master_table.csv to extract partition boundaries
     const parseMasterContent = (text) => {
         const parts = [];
         if (!text) return parts;
@@ -478,19 +480,18 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
             const line = lines[i].trim();
             if(!line) continue;
             
-            // Split by tab (based on .rsgrove format)
-            const cols = line.split(/\t+/); 
+            // Split by comma (based on master_table.csv format)
+            const cols = line.split(','); 
             
-            // Format check: We need the filename (index 1) and the last 4 columns for coords
-            if (cols.length >= 13) {
+            // Format check: master_table.csv has 9 columns.
+            // ID (0), NamePartition (1), NumberGeometries (2), FileSize (3), GeometryType (4), xMin (5), yMin (6), xMax (7), yMax (8)
+            if (cols.length >= 9) {
                 parts.push({
-                    id: cols[1].trim(), // e.g., "part-00000.csv"
-                    // Parse the last 4 columns based on the file structure provided:
-                    // ... Geometry | xmin | ymin | xmax | ymax
-                    minX: parseFloat(cols[9]),
-                    minY: parseFloat(cols[10]),
-                    maxX: parseFloat(cols[11]),
-                    maxY: parseFloat(cols[12])
+                    id: cols[1].trim(), // e.g., "partition_0.csv"
+                    minX: parseFloat(cols[5]),
+                    minY: parseFloat(cols[6]),
+                    maxX: parseFloat(cols[7]),
+                    maxY: parseFloat(cols[8])
                 });
             }
         }
@@ -614,8 +615,8 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
 
             // --- PARTITION GRID LOGIC ---
             // Detect if we are looking at a partition file or the master file itself
-            const isPartitionFile = lowerName.startsWith('part-');
-            const isMasterFile = lowerName.includes('_master') || lowerName.endsWith('.rsgrove');
+            const isPartitionFile = lowerName.startsWith('partition_');
+            const isMasterFile = lowerName.includes('master_table') || lowerName.endsWith('.rsgrove');
 
             if ((isPartitionFile || isMasterFile) && baseDir === 'indexes') {
                 // Determine the folder containing these files
@@ -636,7 +637,7 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
                              const listResp = await fetch(`${API_BASE_URL}/api/explorer/content?path=${folderPath}`);
                              if(listResp.ok) {
                                  const filesInFolder = await listResp.json();
-                                 const masterNode = filesInFolder.find(f => f.label.includes('_master') || f.label.endsWith('.rsgrove'));
+                                 const masterNode = filesInFolder.find(f => f.label.includes('master_table') || f.label.endsWith('.rsgrove'));
                                  
                                  if (masterNode) {
                                      const masterRelPath = `${relativeFolder}/${masterNode.label}`;
