@@ -1,4 +1,0 @@
-datasetName;numQuery;queryArea;minX;minY;maxX;maxY;areaint;cardinality;mbrTests;averageExecutionTime;numberParallelThreads;totalExecutionTime
-dataset1;100;0.81;0.1;0.1;1.0;1.0;1.25;0.0;0;0;1;0
-dataset2;200;0.81;0.1;0.1;1.0;1.0;27.0;0.0;0;0;1;0
-dataset3;150;0.81;0.1;0.1;1.0;1.0;21.25;0.0;0;0;1;0

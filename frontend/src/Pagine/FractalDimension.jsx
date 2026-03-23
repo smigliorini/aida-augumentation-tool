@@ -68,7 +68,7 @@ function FractalDimension() {
     const parameterConfig = {
         distribution: [{ label: 'Distribution (E2)', value: 'distribution' }],
         summary: [ { label: 'Average Area', value: 'avg_area' }, { label: 'Average Side Length 0', value: 'avg_side_length_0' }, { label: 'Average Side Length 1', value: 'avg_side_length_1' },  { label: 'E2 Distribution', value: 'E2' }],
-        range_query: [ { label: 'Cardinality', value: 'cardinality' }, { label: 'Execution Time', value: 'executionTime' }, { label: 'MBR Tests', value: 'mbrTests' }, ],
+        range_query: [ { label: 'Cardinality', value: 'cardinality' }, { label: 'Execution Time', value: 'totalExecutionTime' }, { label: 'MBR Tests', value: 'mbrTests' }, ],
     };
 
     // --- Effect for WebSocket connection ---
@@ -77,7 +77,15 @@ function FractalDimension() {
         socket.on('connect', () => console.log('Socket.IO connected for Fractal Dimension page'));
         
         socket.on('resource_usage', (data) => { setCpuUsage(data.cpu); setRamUsage(data.ram); });
-        socket.on('fractal_dimension_progress', (data) => setProgressMessage(data.message || 'Processing...'));
+        socket.on('fractal_dimension_progress', (data) => {
+            const msg = data.message || 'Processing...';
+            setProgressMessage(msg);
+
+            if (msg.includes('End of script!')) {
+                setIsExecuting(false);
+                setShowProgressDialog(false);
+            }
+        });
         
         socket.on('fractal_dimension_intermediate', (res) => {
             // Map the data to ensure that start and end have default values (e.g. 0 and dim-1).

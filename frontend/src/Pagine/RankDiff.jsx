@@ -38,7 +38,7 @@ function RankDiff() {
     // Options for the parameter selection dropdown.
     const parameters = [
         { label: 'Cardinality', value: 'cardinality' },
-        { label: 'Execution Time', value: 'executionTime' },
+        { label: 'Execution Time', value: 'totalExecutionTime' },
         { label: 'MBR Tests', value: 'mbrTests' }
     ];
 
@@ -85,8 +85,8 @@ function RankDiff() {
     
     // Handles the form submission by sending data to the server via WebSocket.
     const handleSubmit = () => {
-        if (!selectedParameter || !numberIntervals || !selectedRqResultFile) {
-            toast.current.show({ severity: 'error', summary: 'Validation Error', detail: 'Please select a parameter and a result file.', life: 4000 });
+        if (!selectedParameter || !numberIntervals || !selectedRqResultFile || selectedRqResultFile.type !== 'file' || !selectedRqResultFile.label.endsWith('.csv')) {
+            toast.current.show({ severity: 'error', summary: 'Validation Error', detail: 'Please select a parameter and a valid .csv result file.', life: 4000 });
             return;
         }
 

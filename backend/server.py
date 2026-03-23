@@ -54,7 +54,7 @@ PARENT_DIRS = {
     'parent_dir_input_ds': 'parent_dir_input_ds',   # Stores CSV files with parameters for Generator.py.
     'parent_dir_rq_input': 'parent_dir_rq_input',   # Stores input CSV files for Range Queries.
     'range_query_results': 'rangeQueriesResult',    # Stores the results of Range Queries.
-    'parent_dir_rank': 'parent_dir_rank',           # Stores input files for the Rank & Diff analysis.
+    # 'parent_dir_rank': 'parent_dir_rank',           # Stores input files for the Rank & Diff analysis.
     # 'scala_project_root': 'scalaScript',            # Path to the root of the Scala scripts project.
     'trainingSets': 'trainingSets',                 # Stores files related to the balancing analysis (training sets).
     'augmentation_logs': 'augmentation_logs',       # Stores log files from the augmentation process.
@@ -208,7 +208,6 @@ def run_rank_diff_socket(data):
             return
         
         # Use regex to robustly extract the unique session ID
-        # The session ID is defined as YYYYMMDD_HHMMSS_UUID. This avoids dependency on prefixes like 'rqR_'.
         session_id_match = re.search(r'(\d{8}_\d{6}_[0-9a-fA-F]{8})', rq_result_file_name)
         if not session_id_match:
             error_msg = f"Could not extract a valid session ID (e.g., YYYYMMDD_HHMMSS_UUID) from filename: {rq_result_file_name}"
@@ -231,7 +230,7 @@ def run_rank_diff_socket(data):
                     logging.debug(f"Found matching Fractal Dimension file: {filename}")
         
         # --- 3. Dynamic Configuration File Generation ---
-        rank_params_csv_path = os.path.join(DATA_BASE_PATH, "rankParameters.csv")
+        bin_params_csv_path = os.path.join(DATA_BASE_PATH, "binParameters.csv")
         header = ['parameterCategorized', 'numberIntervals', 'pathRangeQueriesResult', 'nameRangeQueriesResult', 'pathSummaries', 'nameSummary', 'pathFD', 'nameFD']
         
         row_values = [
@@ -241,16 +240,16 @@ def run_rank_diff_socket(data):
             path_fd_dir,
         ] + found_fd_files
 
-        with open(rank_params_csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+        with open(bin_params_csv_path, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.writer(csvfile, delimiter=';')
             writer.writerow(header) 
             writer.writerow(row_values)
-        logging.debug(f"Created rankParameters.csv at: {rank_params_csv_path}")
+        logging.debug(f"Created binParameters.csv at: {bin_params_csv_path}")
 
         # --- 4. Subprocess Execution ---
         current_script_dir = os.path.dirname(os.path.abspath(__file__))
-        rank_diff_script_path = os.path.join(current_script_dir, "rank_with_diff.py")
-        cmd = ["python", rank_diff_script_path]
+        rank_diff_script_path = os.path.join(current_script_dir, "ConstructionOfBin.py")
+        cmd = ["python", "-u", rank_diff_script_path]
         logging.debug(f"Executing command: {' '.join(cmd)} in CWD: {DATA_BASE_PATH}")
 
         socketio.start_background_task(monitor_and_emit_usage, stop_monitoring_event)
@@ -269,11 +268,11 @@ def run_rank_diff_socket(data):
 
         # --- 6. Result Handling and Client Communication ---
         if process.returncode != 0:
-            logging.error(f"Error executing rank_with_diff.py. STDOUT: {stdout}")
-            error_details = f"Error running rank_with_diff.py."
+            logging.error(f"Error executing ConstructionOfBin.py. STDOUT: {stdout}")
+            error_details = f"Error running ConstructionOfBin.py."
             emit('rank_diff_error', {'error': error_details, 'output': stdout})
         else:
-            logging.info(f"rank_with_diff.py executed successfully. Output: {stdout}")
+            logging.info(f"ConstructionOfBin.py executed successfully. Output: {stdout}")
             output_folder_leaf = re.sub(r'^(rqR_)?(.*?)(_ts\d*)?$', r'\2', rq_result_file_name.rsplit('.', 1)[0])
             output_info = f"Output files have been generated under the 'trainingSets/{output_folder_leaf}' directory."
             emit('rank_diff_complete', {'message': 'Rank and difference sets generated successfully.', 'details': output_info, 'output': stdout})
@@ -1202,7 +1201,7 @@ def rename_dataset_globally():
     # Define the directories to scan for dataset-related files and folders.
     relevant_dir_keys = [
         'parent_dir_dataset', 'indexes', 'range_query_results', 'trainingSets',
-        'datasetsAugmentation', 'parent_dir_input_ds', 'parent_dir_rank',
+        'datasetsAugmentation', 'parent_dir_input_ds',
         'fractalDimension', 'parent_dir_histogram'
     ]
     dirs_to_scan = [PARENT_DIRS[key] for key in relevant_dir_keys if key in PARENT_DIRS]
@@ -1665,7 +1664,7 @@ ROOT_DIR_LABELS = {
     'range_query_results': '3. Range Query', 'trainingSets': '4. Training Sets',
     'datasetsAugmentation': '5. Augmented Datasets', 'augmentation_logs' : '5.5 Augmentation Logs',
     'parent_dir_histogram': '6. Histogram', 'fractalDimension': '#. Fractal Dimension','parent_dir_input_ds': 'a. Input Collection Files',
-    'parent_dir_rq_input': 'b. Input Range Query Files', 'parent_dir_rank': 'c. Input Balacing Analysis',
+    'parent_dir_rq_input': 'b. Input Range Query Files',
 }
 
 
@@ -1677,7 +1676,7 @@ def get_explorer_roots():
     """
     # Define the exact order for output and input folders.
     output_folders_order = ['parent_dir_dataset', 'indexes', 'range_query_results', 'trainingSets', 'datasetsAugmentation', 'augmentation_logs', 'parent_dir_histogram', 'fractalDimension']
-    input_folders = ['parent_dir_input_ds', 'parent_dir_rq_input', 'parent_dir_rank']
+    input_folders = ['parent_dir_input_ds', 'parent_dir_rq_input']
 
     root_nodes = []
     # Add output folders.

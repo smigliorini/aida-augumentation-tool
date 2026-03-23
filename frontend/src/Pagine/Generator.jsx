@@ -122,14 +122,15 @@ function Generator() {
     // ADDED: editor and onCellEditComplete to enable inline editing.
     const columns = [
         { field: 'distribution', header: 'Distribution', editor: (options) => textEditor(options) }, 
+        { field: 'geometry', header: 'Geometry', editor: (options) => textEditor(options)},
         { field: 'x1', header: 'X1', editor: (options) => numberEditor(options) },
         { field: 'y1', header: 'Y1', editor: (options) => numberEditor(options) }, 
         { field: 'x2', header: 'X2', editor: (options) => numberEditor(options) }, 
         { field: 'y2', header: 'Y2', editor: (options) => numberEditor(options) },
         { field: 'cardinality', header: 'Cardinality', editor: (options) => numberEditor(options) },
-        { field: 'maxsize', header: 'avg_side_lengths', editor: (options) => textEditor(options) }, 
-        { field: 'polysize', header: 'avg_area', editor: (options) => numberEditor(options) },
-        { field: 'maxseg', header: 'max_seg', editor: (options) => numberEditor(options) },
+        { field: 'maxsize', header: 'Avg_side_lengths', editor: (options) => textEditor(options) }, 
+        { field: 'polysize', header: 'Avg_area', editor: (options) => numberEditor(options) },
+        { field: 'maxseg', header: 'Max_seg', editor: (options) => numberEditor(options) },
         {
             header: 'Actions',
             body: (rowData) => (<Button icon="pi pi-trash" className="p-button-danger" onClick={() => handleDelete(rowData)} />)
@@ -255,13 +256,25 @@ function Generator() {
                             if (!isNaN(value) && value !== '') {
                                 value = parseFloat(value);
                             }
-                            
-                            // Map CSV headers to internal state keys if they differ
-                            // For simplicity, we assume CSV headers match state keys or close enough
-                            // Specifically handle 'avg_side_length_0' & 'avg_side_length_1' mapping to 'maxsize' string
-                            
                             row[header] = value;
                         });
+
+                        // --- TRADUZIONE DAI CAMPI CSV A QUELLI DELLA TABELLA ---
+                        if (row.num_features !== undefined) row.cardinality = row.num_features;
+                        if (row.max_seg !== undefined) row.maxseg = row.max_seg;
+                        if (row.avg_area !== undefined) row.polysize = row.avg_area;
+
+                        // Assicuriamoci che datasetName sia popolato correttamente anche se l'utente ha scritto "datasetname" nel CSV
+                        if (!row.datasetName && row.datasetname !== undefined) {
+                            row.datasetName = row.datasetname;
+                        }
+
+                        // Post-processing for Generator specific structure
+                        // The backend expects "maxsize" as "val1,val2" if side lengths are provided
+                        if (row.avg_side_length_0 !== undefined && row.avg_side_length_1 !== undefined && row.avg_side_length_0 !== '' && row.avg_side_length_1 !== '') {
+                            row.maxsize = `${row.avg_side_length_0},${row.avg_side_length_1}`;
+                            row.polysize = row.avg_side_length_0 * row.avg_side_length_1;
+                        }
 
                         // Post-processing for Generator specific structure
                         // The backend expects "maxsize" as "val1,val2" if side lengths are provided
@@ -501,7 +514,28 @@ dataset3;uniform;box;9.5;3.5;16.5;9.5;300;4;;0.02;0.1;0.2;;
         }
         startGeneration();
         // Remove the temporary 'id' field before sending to the server.
-        const dataToSendToServer = datasets.map(({ id, ...rest }) => rest);
+        const dataToSendToServer = datasets.map(({ id, ...rest }) => {
+            let dataset = { ...rest};
+
+            //Automatic calculation of the affine matrix from x1,y1,x2,y2
+            if (!dataset.affinematrix && dataset.x1 !== undefined && dataset.y1 !== undefined && dataset.x2 !== undefined && dataset.y2 !== undefined) {
+                const x1 = parseFloat(dataset.x1);
+                const x2 = parseFloat(dataset.x2);
+                const y1 = parseFloat(dataset.y1);
+                const y2 = parseFloat(dataset.y2);
+
+                const a1 = (x2 - x1).toFixed(6);
+                const a3 = x1;
+                const a5 = (y2 - y1).toFixed(6);
+                const a6 = y1;
+                
+                dataset.affinematrix = `${a1},0,${a3},0,${a5},${a6}`;
+        }
+
+        return dataset;
+    });
+
+        
         // Use the imported socket instance to emit the event.
         socket.emit('generate_data', { datasets: dataToSendToServer, folder: selectedFolder });
     };

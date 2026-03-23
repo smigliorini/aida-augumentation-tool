@@ -11,6 +11,7 @@ import { ScrollPanel } from 'primereact/scrollpanel';
 import { Divider } from 'primereact/divider';
 import { InputText } from 'primereact/inputtext';
 import { Toolbar } from 'primereact/toolbar';
+import { SelectButton } from 'primereact/selectbutton';
 // Import the base URL for API calls from the central socket configuration.
 import { API_BASE_URL } from '../socket';
 
@@ -61,6 +62,10 @@ const DatasetVisualizer = ({ content, fileName, comparisonContent, comparisonFil
         };
 
         if (!text) return { items, bounds: { minX: 0, maxX: 1, minY: 0, maxY: 1 }, type: 'Empty' };
+
+        if (lowerName.includes('master_table') || lowerName.endsWith('.rsgrove')) {
+            return { items: [], bounds: { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity }, type: 'Master Grid' };
+       }
 
         // --- CSV PARSING ---
         if (lowerName.endsWith('.csv')) {
@@ -185,6 +190,9 @@ const DatasetVisualizer = ({ content, fileName, comparisonContent, comparisonFil
             // 3. Expand bounds to include Partition Grid (if available)
             // This ensures that even empty partitions are within the view
             if (partitions && partitions.length > 0) {
+                if (finalBounds.minX === Infinity) {
+                    finalBounds = { minX: partitions[0].minX, maxX: partitions[0].maxX, minY: partitions[0].minY, maxY: partitions[0].maxY };
+                }
                  partitions.forEach(p => {
                     finalBounds.minX = Math.min(finalBounds.minX, p.minX);
                     finalBounds.maxX = Math.max(finalBounds.maxX, p.maxX);
@@ -233,188 +241,188 @@ const DatasetVisualizer = ({ content, fileName, comparisonContent, comparisonFil
         setTransform({ k, x: tx, y: ty });
     };
 
-// --- EFFECT: Render Canvas ---
-useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !parsedData) return;
+    // --- EFFECT: Render Canvas ---
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas || !parsedData) return;
 
-    const ctx = canvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
-    const rect = containerRef.current.getBoundingClientRect();
-    
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    canvas.style.width = `${rect.width}px`;
-    canvas.style.height = `${rect.height}px`;
-    
-    ctx.scale(dpr, dpr);
-    
-    const width = rect.width;
-    const height = rect.height;
-
-    // 1. Clear canvas
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, width, height);
-
-    const { k, x, y } = transform;
-    const { minX, maxX, minY, maxY } = parsedData.bounds;
-    
-    const toScreenX = (val) => val * k + x;
-    const toScreenY = (val) => height - (val * k + y); 
-
-    // 2. Draw Axes (Background layer)
-    ctx.save();
-    ctx.strokeStyle = '#999'; ctx.lineWidth = 1.5; ctx.beginPath();
-    if (minY <= 0 && maxY >= 0) { const axisY = toScreenY(0); ctx.moveTo(0, axisY); ctx.lineTo(width, axisY); }
-    if (minX <= 0 && maxX >= 0) { const axisX = toScreenX(0); ctx.moveTo(axisX, 0); ctx.lineTo(axisX, height); }
-    ctx.stroke();
-    ctx.restore();
-
-    // 3. Define Helper to Draw Items
-    const drawItems = (items, isComparison) => {
-         items.forEach(item => {
-            if (item.type === 'circle') {
-                const cx = toScreenX(item.x);
-                const cy = toScreenY(item.y);
-                if (cx < -5 || cx > width + 5 || cy < -5 || cy > height + 5) return;
-                
-                ctx.fillStyle = isComparison ? 'rgba(200, 200, 200, 0.4)' : 'rgba(59, 130, 246, 0.6)'; 
-                const size = Math.max(2, Math.min(10, 3 * k));
-                ctx.fillRect(cx - size/2, cy - size/2, size, size);
-
-            } else if (item.type === 'rect') {
-                const sx = toScreenX(item.x);
-                const sy = toScreenY(item.y + item.h); 
-                const sw = item.w * k;
-                const sh = item.h * k;
-                if (sx + sw < 0 || sx > width || sy + sh < 0 || sy > height) return;
-
-                if (isComparison) {
-                    ctx.strokeStyle = 'rgba(150, 150, 150, 0.3)';
-                    ctx.lineWidth = 1;
-                    ctx.strokeRect(sx, sy, sw, sh);
-                } else {
-                    ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
-                    ctx.fillRect(sx, sy, sw, sh);
-                    ctx.strokeStyle = 'rgba(239, 68, 68, 0.9)';
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(sx, sy, sw, sh);
-                }
-
-            } else if (item.type === 'polygon') {
-                ctx.strokeStyle = isComparison ? '#ccc' : '#10B981'; 
-                ctx.fillStyle = isComparison ? 'rgba(220, 220, 220, 0.2)' : 'rgba(16, 185, 129, 0.2)';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                let inView = false;
-                item.points.forEach((p, idx) => {
-                    const px = toScreenX(p.x);
-                    const py = toScreenY(p.y);
-                    if (px >= 0 && px <= width && py >= 0 && py <= height) inView = true;
-                    if (idx === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-                });
-                if (inView) { ctx.closePath(); ctx.stroke(); ctx.fill(); }
-            }
-        });
-    };
-
-    // 4. Draw Data Layers
-    // Draw Comparison Layer First (Background Data)
-    if (parsedComparisonData) drawItems(parsedComparisonData.items, true);
-    // Draw Main Data (Foreground Data)
-    if (parsedData) drawItems(parsedData.items, false);
-
-    // 5. Draw Partition Grid (MOVED HERE - LAST STEP)
-    // Drawing this last ensures the grid lines overlay the data points
-    ctx.save();
-    if (partitions && partitions.length > 0) {
-        partitions.forEach(part => {
-            const px = toScreenX(part.minX);
-            const py = toScreenY(part.maxY); 
-            const pw = (part.maxX - part.minX) * k;
-            const ph = (part.maxY - part.minY) * k;
-
-            const isMasterView = fileName.toLowerCase().includes('master_table') || fileName.toLowerCase().endsWith('.rsgrove');
-            // Extract the base name without extention
-            const activePartBase = part.id.split('.')[0]; 
-            const isActivePart = fileName.includes(activePartBase);
-
-            ctx.lineWidth = 1;
-
-            if (isMasterView || isActivePart) {
-                ctx.fillStyle = 'rgba(255, 165, 0, 0.15)'; 
-                ctx.fillRect(px, py, pw, ph);
-                ctx.strokeStyle = 'rgba(255, 140, 0, 0.8)';
-            } else {
-                ctx.strokeStyle = 'rgba(100, 100, 100, 0.6)'; // Made slightly darker to be visible over grey points
-                ctx.fillStyle = 'transparent'; 
-            }
-
-            ctx.strokeRect(px, py, pw, ph);
-
-            if (pw > 40 && ph > 20 && (isMasterView || isActivePart)) {
-                ctx.fillStyle = '#444'; // Darker text
-                ctx.font = 'bold 10px Arial';
-                const label = part.id.replace('.csv', '');
-                ctx.fillText(label, px + 4, py + 14);
-            }
-        });
-    } else {
-        // Fallback: Standard Bounding Box
-        ctx.strokeStyle = '#e0e0e0';
-        const bLeft = toScreenX(minX); const bRight = toScreenX(maxX);
-        const bBottom = toScreenY(minY); const bTop = toScreenY(maxY); 
-        ctx.strokeRect(bLeft, bTop, bRight - bLeft, bBottom - bTop);
-    }
-    ctx.restore();
-    
-}, [transform, parsedData, parsedComparisonData, partitions, fileName]);
-
-    // --- INTERACTION HANDLERS ---
-    const handleWheel = useCallback((e) => {
-        e.preventDefault();
-        const zoomSensitivity = 0.001;
-        const delta = -e.deltaY * zoomSensitivity;
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
         const rect = containerRef.current.getBoundingClientRect();
         
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        canvas.style.width = `${rect.width}px`;
+        canvas.style.height = `${rect.height}px`;
         
-        const worldX = (mouseX - transform.x) / transform.k;
-        const worldY = (rect.height - mouseY - transform.y) / transform.k;
+        ctx.scale(dpr, dpr);
         
-        const newK = Math.max(0.1, Math.min(1000, transform.k * (1 + delta)));
-        const newX = mouseX - worldX * newK;
-        const newY = rect.height - mouseY - worldY * newK;
-        
-        setTransform({ k: newK, x: newX, y: newY });
-    }, [transform]);
+        const width = rect.width;
+        const height = rect.height;
 
-    const handleMouseDown = (e) => { setIsDragging(true); setLastMouse({ x: e.clientX, y: e.clientY }); };
-    const handleMouseMove = (e) => {
-        if (!isDragging) return;
-        const dx = e.clientX - lastMouse.x;
-        const dy = e.clientY - lastMouse.y;
-        setTransform(prev => ({ ...prev, x: prev.x + dx, y: prev.y - dy })); 
-        setLastMouse({ x: e.clientX, y: e.clientY });
+        // 1. Clear canvas
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+
+        const { k, x, y } = transform;
+        const { minX, maxX, minY, maxY } = parsedData.bounds;
+        
+        const toScreenX = (val) => val * k + x;
+        const toScreenY = (val) => height - (val * k + y); 
+
+        // 2. Draw Axes (Background layer)
+        ctx.save();
+        ctx.strokeStyle = '#999'; ctx.lineWidth = 1.5; ctx.beginPath();
+        if (minY <= 0 && maxY >= 0) { const axisY = toScreenY(0); ctx.moveTo(0, axisY); ctx.lineTo(width, axisY); }
+        if (minX <= 0 && maxX >= 0) { const axisX = toScreenX(0); ctx.moveTo(axisX, 0); ctx.lineTo(axisX, height); }
+        ctx.stroke();
+        ctx.restore();
+
+        // 3. Define Helper to Draw Items
+        const drawItems = (items, isComparison) => {
+            items.forEach(item => {
+                if (item.type === 'circle') {
+                    const cx = toScreenX(item.x);
+                    const cy = toScreenY(item.y);
+                    if (cx < -5 || cx > width + 5 || cy < -5 || cy > height + 5) return;
+                    
+                    ctx.fillStyle = isComparison ? 'rgba(200, 200, 200, 0.4)' : 'rgba(59, 130, 246, 0.6)'; 
+                    const size = Math.max(2, Math.min(10, 3 * k));
+                    ctx.fillRect(cx - size/2, cy - size/2, size, size);
+
+                } else if (item.type === 'rect') {
+                    const sx = toScreenX(item.x);
+                    const sy = toScreenY(item.y + item.h); 
+                    const sw = item.w * k;
+                    const sh = item.h * k;
+                    if (sx + sw < 0 || sx > width || sy + sh < 0 || sy > height) return;
+
+                    if (isComparison) {
+                        ctx.strokeStyle = 'rgba(150, 150, 150, 0.3)';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(sx, sy, sw, sh);
+                    } else {
+                        ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
+                        ctx.fillRect(sx, sy, sw, sh);
+                        ctx.strokeStyle = 'rgba(239, 68, 68, 0.9)';
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(sx, sy, sw, sh);
+                    }
+
+                } else if (item.type === 'polygon') {
+                    ctx.strokeStyle = isComparison ? '#ccc' : '#10B981'; 
+                    ctx.fillStyle = isComparison ? 'rgba(220, 220, 220, 0.2)' : 'rgba(16, 185, 129, 0.2)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    let inView = false;
+                    item.points.forEach((p, idx) => {
+                        const px = toScreenX(p.x);
+                        const py = toScreenY(p.y);
+                        if (px >= 0 && px <= width && py >= 0 && py <= height) inView = true;
+                        if (idx === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                    });
+                    if (inView) { ctx.closePath(); ctx.stroke(); ctx.fill(); }
+                }
+            });
+        };
+
+        // 4. Draw Data Layers
+        // Draw Comparison Layer First (Background Data)
+        if (parsedComparisonData) drawItems(parsedComparisonData.items, true);
+        // Draw Main Data (Foreground Data)
+        if (parsedData) drawItems(parsedData.items, false);
+
+        // 5. Draw Partition Grid
+        // Drawing this last ensures the grid lines overlay the data points
+        ctx.save();
+        if (partitions && partitions.length > 0) {
+            partitions.forEach(part => {
+                const px = toScreenX(part.minX);
+                const py = toScreenY(part.maxY); 
+                const pw = (part.maxX - part.minX) * k;
+                const ph = (part.maxY - part.minY) * k;
+
+                const isMasterView = fileName.toLowerCase().includes('master_table') || fileName.toLowerCase().endsWith('.rsgrove');
+                // Extract the base name without extention
+                const activePartBase = part.id.split('.')[0]; 
+                const isActivePart = fileName.includes(activePartBase);
+
+                ctx.lineWidth = 1;
+
+                if (isMasterView || isActivePart) {
+                    ctx.fillStyle = 'rgba(255, 165, 0, 0.15)'; 
+                    ctx.fillRect(px, py, pw, ph);
+                    ctx.strokeStyle = 'rgba(255, 140, 0, 0.8)';
+                } else {
+                    ctx.strokeStyle = 'rgba(100, 100, 100, 0.6)'; // Made slightly darker to be visible over grey points
+                    ctx.fillStyle = 'transparent'; 
+                }
+
+                ctx.strokeRect(px, py, pw, ph);
+
+                if (pw > 40 && ph > 20 && (isMasterView || isActivePart)) {
+                    ctx.fillStyle = '#444'; // Darker text
+                    ctx.font = 'bold 10px Arial';
+                    const label = part.id.replace('.csv', '');
+                    ctx.fillText(label, px + 4, py + 14);
+                }
+            });
+        } else {
+            // Fallback: Standard Bounding Box
+            ctx.strokeStyle = '#e0e0e0';
+            const bLeft = toScreenX(minX); const bRight = toScreenX(maxX);
+            const bBottom = toScreenY(minY); const bTop = toScreenY(maxY); 
+            ctx.strokeRect(bLeft, bTop, bRight - bLeft, bBottom - bTop);
+        }
+        ctx.restore();
+        
+    }, [transform, parsedData, parsedComparisonData, partitions, fileName]);
+
+        // --- INTERACTION HANDLERS ---
+        const handleWheel = useCallback((e) => {
+            e.preventDefault();
+            const zoomSensitivity = 0.001;
+            const delta = -e.deltaY * zoomSensitivity;
+            const rect = containerRef.current.getBoundingClientRect();
+            
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            const worldX = (mouseX - transform.x) / transform.k;
+            const worldY = (rect.height - mouseY - transform.y) / transform.k;
+            
+            const newK = Math.max(0.1, Math.min(1000, transform.k * (1 + delta)));
+            const newX = mouseX - worldX * newK;
+            const newY = rect.height - mouseY - worldY * newK;
+            
+            setTransform({ k: newK, x: newX, y: newY });
+        }, [transform]);
+
+        const handleMouseDown = (e) => { setIsDragging(true); setLastMouse({ x: e.clientX, y: e.clientY }); };
+        const handleMouseMove = (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - lastMouse.x;
+            const dy = e.clientY - lastMouse.y;
+            setTransform(prev => ({ ...prev, x: prev.x + dx, y: prev.y - dy })); 
+            setLastMouse({ x: e.clientX, y: e.clientY });
+        };
+        const handleMouseUp = () => setIsDragging(false);
+
+        return (
+            <div className="flex flex-col w-full h-full relative">
+                <div className="absolute top-2 right-2 z-5 flex gap-2">
+                    <Button icon="pi pi-home" className="p-button-rounded p-button-secondary p-button-sm shadow-2" tooltip="Reset View" onClick={() => parsedData && fitToScreen(parsedData.bounds)} />
+                </div>
+                <div ref={containerRef} className="w-full h-full bg-white overflow-hidden cursor-move relative" onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
+                    <canvas ref={canvasRef} className="block" />
+                </div>
+                <div className="absolute bottom-2 left-2 bg-white-alpha-80 p-1 border-round text-sm text-gray-700 shadow-1">
+                    {status} | Zoom: {transform.k.toFixed(2)}x
+                </div>
+            </div>
+        );
     };
-    const handleMouseUp = () => setIsDragging(false);
-
-    return (
-        <div className="flex flex-col w-full h-full relative">
-            <div className="absolute top-2 right-2 z-5 flex gap-2">
-                 <Button icon="pi pi-home" className="p-button-rounded p-button-secondary p-button-sm shadow-2" tooltip="Reset View" onClick={() => parsedData && fitToScreen(parsedData.bounds)} />
-            </div>
-            <div ref={containerRef} className="w-full h-full bg-white overflow-hidden cursor-move relative" onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
-                <canvas ref={canvasRef} className="block" />
-            </div>
-            <div className="absolute bottom-2 left-2 bg-white-alpha-80 p-1 border-round text-sm text-gray-700 shadow-1">
-                {status} | Zoom: {transform.k.toFixed(2)}x
-            </div>
-        </div>
-    );
-};
 
 /**
  * FileExplorer Component
@@ -436,8 +444,8 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
     const [previewComparisonFileName, setPreviewComparisonFileName] = useState(''); 
     const [previewType, setPreviewType] = useState('text'); 
     const [previewFileName, setPreviewFileName] = useState('');
-    // New state to hold partition grid data from the master file
     const [previewPartitions, setPreviewPartitions] = useState([]); 
+    const [isVisualSupported, setIsVisualSupported] = useState(false);
     
     // Rename Dialog States
     const [isRenameDialogVisible, setIsRenameDialogVisible] = useState(false);
@@ -474,6 +482,8 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         const parts = [];
         if (!text) return parts;
         const lines = text.trim().split('\n');
+
+        const delimiter = lines[0].includes(';') ? ';' : ',';
         
         // Skip header line (index 0) and process data lines
         for(let i = 1; i < lines.length; i++) {
@@ -481,18 +491,25 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
             if(!line) continue;
             
             // Split by comma (based on master_table.csv format)
-            const cols = line.split(','); 
+            const cols = line.split(delimiter); 
             
             // Format check: master_table.csv has 9 columns.
             // ID (0), NamePartition (1), NumberGeometries (2), FileSize (3), GeometryType (4), xMin (5), yMin (6), xMax (7), yMax (8)
             if (cols.length >= 9) {
-                parts.push({
-                    id: cols[1].trim(), // e.g., "partition_0.csv"
-                    minX: parseFloat(cols[5]),
-                    minY: parseFloat(cols[6]),
-                    maxX: parseFloat(cols[7]),
-                    maxY: parseFloat(cols[8])
-                });
+                const minX = parseFloat(cols[5]);
+                const minY = parseFloat(cols[6]);
+                const maxX = parseFloat(cols[7]);
+                const maxY = parseFloat(cols[8]);
+
+                if (!isNaN(minX) && !isNaN(minY) && !isNaN(maxX) && !isNaN(maxY)) {
+                    parts.push({
+                        id: cols[1].trim(),
+                        minX: minX,
+                        minY: minY,
+                        maxX: maxX,
+                        maxY: maxY
+                    });
+                }
             }
         }
         return parts;
@@ -602,9 +619,12 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
         // All other directories (e.g., Range Query results) should display as plain text, even if they are CSV/WKT.
         const allowedVisualDirs = ['parent_dir_dataset', 'indexes'];
         const isVisualFormat = lowerName.endsWith('.csv') || lowerName.endsWith('.wkt') || lowerName.endsWith('.rsgrove');
+
+        const canBeVisual = isVisualFormat && allowedVisualDirs.includes(baseDir);
+        setIsVisualSupported(canBeVisual);
         
-        // Set visual mode only if both format and directory are supported, otherwise default to text
-        setPreviewType((isVisualFormat && allowedVisualDirs.includes(baseDir)) ? 'visual' : 'text');
+        // Set visual mode only if both format and directory are supported, otherwise default to text (for selection set default to text in master.groove)
+        setPreviewType('text');
 
         try {
             // 1. Fetch Main File Content
@@ -818,6 +838,24 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
     const endToolbarContent = <Button icon="pi pi-refresh" className="p-button-sm p-button-secondary" onClick={handleManualRefresh} loading={loading} />;
     const renameDialogFooter = <><Button label="Cancel" icon="pi pi-times" className="p-button-text" onClick={() => setIsRenameDialogVisible(false)} /><Button label="Rename" icon="pi pi-check" onClick={handleRenameFolder} autoFocus /></>;
 
+    const renderPreviewHeader = () => {
+        return (
+            <div className="flex justify-content-between align-items-center w-full pr-4">
+                <span className="p-dialog-title">Preview: {previewFileName}</span>
+                {isVisualSupported && (
+                    <SelectButton 
+                        value={previewType} 
+                        onChange={(e) => { if (e.value) setPreviewType(e.value) }} 
+                        options={[
+                            { label: 'Text (CSV)', value: 'text' }, 
+                            { label: 'Graphical', value: 'visual' }
+                        ]} 
+                    />
+                )}
+            </div>
+        );
+    };
+
     return (
         <Panel header="File System Explorer" toggleable pt={{ content: { className: 'p-1' } }}>
             <Toolbar start={folderActions} end={endToolbarContent} className="border-none mb-2"/>
@@ -840,14 +878,14 @@ function FileExplorer({ onFolderSelect, onFileSelect }) {
             </Splitter>
 
             {/* File Preview Dialog */}
-            <Dialog header={`Preview: ${previewFileName}`} visible={isPreviewDialogVisible} style={{ width: '90vw' }} contentStyle={{ height: '80vh', overflow: 'hidden' }} modal onHide={() => setIsPreviewDialogVisible(false)}>
+            <Dialog header={renderPreviewHeader()} visible={isPreviewDialogVisible} style={{ width: '90vw' }} contentStyle={{ height: '80vh', overflow: 'hidden' }} modal onHide={() => setIsPreviewDialogVisible(false)}>
                  {previewType === 'visual' ? (
                      <DatasetVisualizer 
                         content={previewContent} 
                         fileName={previewFileName} 
                         comparisonContent={previewComparisonContent} 
                         comparisonFileName={previewComparisonFileName} 
-                        partitions={previewPartitions} // Pass the parsed partition grid to the visualizer
+                        partitions={previewPartitions} 
                     />
                  ) : (
                     <ScrollPanel style={{ width: '100%', height: '100%' }}><pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{previewContent}</pre></ScrollPanel>
