@@ -60,14 +60,14 @@ function FractalDimension() {
 
     // --- Static configuration objects ---
     const analysisTypeOptions = [
-        { label: 'Input Spatial Distributions (E2)', value: 'distribution' },
+        { label: 'Input Spatial Distributions (E0 & E2)', value: 'distribution' },
         { label: 'Input Spatial Properties', value: 'summary' },
         { label: 'Ground Truth Values', value: 'range_query' },
     ];
     
     const parameterConfig = {
         distribution: [{ label: 'Distribution (E2)', value: 'distribution' }],
-        summary: [ { label: 'Average Area', value: 'avg_area' }, { label: 'Average Side Length 0', value: 'avg_side_length_0' }, { label: 'Average Side Length 1', value: 'avg_side_length_1' },  { label: 'E2 Distribution', value: 'E2' }],
+        summary: [ { label: 'Average Area', value: 'avg_area' }, { label: 'Average Side Length 0', value: 'avg_side_length_0' }, { label: 'Average Side Length 1', value: 'avg_side_length_1' }, { label: 'E0 Distribution', value: 'E0' },  { label: 'E2 Distribution', value: 'E2' }],
         range_query: [ { label: 'Cardinality', value: 'cardinality' }, { label: 'Execution Time', value: 'totalExecutionTime' }, { label: 'MBR Tests', value: 'mbrTests' }, ],
     };
 

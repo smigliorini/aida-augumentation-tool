@@ -2264,6 +2264,7 @@ def get_fractal_data():
     for dataset_id in selected_ids:
         # This dictionary will hold the structured results for the current dataset_id
         current_dataset_results = {
+            "e0Distribution": [],
             "e2Distribution": [],
             "groupProperties": [],
             "rangeQueryResults": {
@@ -2272,22 +2273,30 @@ def get_fractal_data():
             }
         }
         
-        # --- Step 1: Fetch E2 Distribution (per-dataset values) ---
+        # --- Step 1: Fetch E0 and E2 Distribution (per-dataset values) ---
         try:
             summary_path = os.path.join(PARENT_DIRS['parent_dir_input_ds'], f"input_params_{dataset_id}.csv")
             if os.path.exists(summary_path):
                 df = pd.read_csv(summary_path, delimiter=';')
-                # Ensure required columns exist before proceeding
-                if 'datasetName' in df.columns and 'E2' in df.columns:
-                    # Filter out rows where E2 is NaN or empty
-                    e2_data = df[['datasetName', 'E2']].dropna(subset=['E2'])
-                    for index, row in e2_data.iterrows():
-                        current_dataset_results["e2Distribution"].append({
-                            'datasetName': row['datasetName'],
-                            'e2Value': float(row['E2'])
-                        })
+                if 'datasetName' in df.columns:
+                    # Estrazione E2
+                    if 'E2' in df.columns:
+                        e2_data = df[['datasetName', 'E2']].dropna(subset=['E2'])
+                        for index, row in e2_data.iterrows():
+                            current_dataset_results["e2Distribution"].append({
+                                'datasetName': row['datasetName'],
+                                'e2Value': float(row['E2'])
+                            })
+                    # Estrazione E0 (NUOVA)
+                    if 'E0' in df.columns:
+                        e0_data = df[['datasetName', 'E0']].dropna(subset=['E0'])
+                        for index, row in e0_data.iterrows():
+                            current_dataset_results["e0Distribution"].append({
+                                'datasetName': row['datasetName'],
+                                'e0Value': float(row['E0'])
+                            })
         except Exception as e:
-            logging.error(f"Error processing E2 distribution for {dataset_id}: {e}")
+            logging.error(f"Error processing distribution for {dataset_id}: {e}")
 
         # --- Step 2: Fetch Dataset Group Properties (FD of summary file columns) ---
         try:

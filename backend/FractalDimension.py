@@ -237,7 +237,9 @@ def fd2D (from_x, to_x, start_x, end_x, start_y, end_y, file_name, delim):
 		   start_x, end_x, start_y, end_y --> dimensione finestra del dataset;
 		   file_name --> path completo contenente il dataset in questione;
 		   delim --> delimitatore all'interno del file '.csv' (',' o ';' solitamente).
-	Output: Slope --> dimansione frattale richiesta.
+	Output: x --> vettore contenente le scale logaritmiche della dimensione delle box;
+			y_E0 --> vettore contenente le "box-counting" diverse da zero;
+			y_E2 --> vettore contenente i "correletion-sum".
 	"""
 
 	deltax = end_x - start_x						# lunghezza x della finestra di dataset
@@ -278,9 +280,11 @@ def fd2D (from_x, to_x, start_x, end_x, start_y, end_y, file_name, delim):
 
 	# Computing box counting for E2
 	x = np.zeros((DIM-1))							# Scala logaritmica della dimensione delle celle
-	y = np.zeros((DIM-1))							# Misura della frammentazione
+	y_E0 = np.zeros((DIM-1))						# Misura della frammentazione [PER CALCOLO DI E0]
+	y_E2 = np.zeros((DIM-1))						# Misura della frammentazione [PER CALCOLO DI E2]
 	for i in range(DIM-1):							# Analisi su varie dimensioni di box (i=0 celle originali, i=1 celle a coppie, i=2 celle a terzetti...)
 		sm = 0.0
+		count_no_empty = 0
 		step = pow(2,i)								# Quanto raggruppare le celle
 		print("<System>           i: ", i)
 		for j in range(0,pow(2,DIM),step):			# Scorrimento verticale della griglia
@@ -288,14 +292,19 @@ def fd2D (from_x, to_x, start_x, end_x, start_y, end_y, file_name, delim):
 				print ("<System>           j: ", j)
 			for k in range(0,pow(2,DIM),step):		# Scorrimento orizzontale della griglia
 				h = hist[j:j+step,k:k+step]			# Prendo un gruppo di celle (estrazione di una sottomatrice di celle)
-				sm += pow(np.sum(h),2)				# Somma il numero di elementi nel blocco e lo eleva al quadrato
+				block_sum = np.sum(h)				# Sommo il numero di elementi nel blocco
+				if block_sum > 0:					# Se il blocco analizzato ha almeno un elemento... [PER CALCOLO DI E0]
+					count_no_empty += 1				# Aumento la variabile contatore legato al gruppo di celle non vuote analizzate
+				sm += pow(block_sum,2)				# Eleva al quadrato e aggiungo a quanto calcolato già [PER CALCOLO DI E2]
+		print("<System>           no empty: ", count_no_empty)
 		print("<System>           sm: ", sm)
 
 		# Salvataggio dei valori logaritmici per ogni i analizzata
 		x[i] = math.log(cell_width * step,2)		# Log in base 2 della dimensione della box
-		y[i] = math.log(sm,2)						# Log in base 2 della misura accumulata
+		y_E0[i] = math.log(count_no_empty, 2)		# Log in base 2 relativo al conteggio dei blocchi non vuoti [PER CALCOLO E0]
+		y_E2[i] = math.log(sm,2)					# Log in base 2 relativo alla misura accumulata [PER CALCOLO E2]
 
-	return x, y
+	return x, y_E0, y_E2
 
 # -----------------------------------------------------------------------------------------------------------------------------------
 # FUNZIONE "fd":
@@ -354,7 +363,7 @@ def fd (from_x, to_x, start, end, file_name, field_name, delim):
 
 # -----------------------------------------------------------------------------------------------------------------------------------
 # Funzione "fractalDimension_calculation":
-def fractalDimension_calculation(start, end, x_list, y_list):
+def fractalDimension_calculation(start, end, x_list, y_list, kind):
 
 	"""
 	Funzione che, passati i valori di x, y, start e end, calcoli la dimensione frattale richiesta.
@@ -377,20 +386,25 @@ def fractalDimension_calculation(start, end, x_list, y_list):
 	#Calcolo della retta interpolante (slope = dimensione frattale)
 	slope, intercept, r, p, std_err = stats.linregress(x_new, y_new)
 
-	return slope
+	if kind == "negative":
+		return -slope
+	else:
+		return slope
 
 # -----------------------------------------------------------------------------------------------------------------------------------
 # Funzione "update_summary":
-def update_summary(path_nameSummary, fractalDimensions):
+def update_summary(path_nameSummary, fractalDimensions_E0, fractalDimensions_E2):
 
 	"""
 	Funzione che, passato un file contenente il sommario dei datasets, e le dimensioni frattali
 	calcolate, aggiorni il file sommario (colonna E2).
 	Input: path_nameSummary --> percorso completo del file contenente il sommario dei datasets;
-		   fractalDimensions --> lista con il calcolo delle dimensioni frattali per dataset.
+		   fractalDimensions_E0 --> lista con il calcolo delle dimensioni frattali per dataset - E0;
+		   fractalDimensions_E2 --> lista con il calcolo delle dimensioni frattali per dataset - E2;
 	"""
 
-	fd_dict = dict(fractalDimensions)											# Converto fractalDimensions in un dizionario -> più facile cercare
+	fd_dictE0 = dict(fractalDimensions_E0) if fractalDimensions_E0 else {}		# Converto fractalDimensions_E0 in un dizionario (se non None) -> più facile cercare
+	fd_dictE2 = dict(fractalDimensions_E2) if fractalDimensions_E2 else {}		# Converto fractalDimensions_E2 in un dizionario (se non None) -> più facile cercare
 
 	rows = []
 	with open(path_nameSummary, mode="r", encoding="utf-8") as infile:			# Apertura del file in scrittura
@@ -399,8 +413,10 @@ def update_summary(path_nameSummary, fractalDimensions):
 
 		for row in reader:														# Ciclo su tutte le righe del file
 			datasetName = row["datasetName"]									# Leggo il nome del dataset
-			if datasetName in fd_dict:											# Se è stata calcolata la dimensione frattale ...
-				row["E2"] = fd_dict[datasetName]								# ... la aggiorno
+
+			row["E0"] = fd_dictE0.get(datasetName, row.get("E0", ""))			# Aggiorno il calcolo di E0 (se calcolato), altrimenti tengo il valore originale
+			row["E2"] = fd_dictE2.get(datasetName, row.get("E2", ""))			# Aggiorno il calcolo di E" (se calcolato), altrimenti tengo il valore originale
+
 			rows.append(row)
 
 	# Sovrascrivo il file con la colonna E2 aggiornata
@@ -655,10 +671,15 @@ def main():
 	for p in parameters:
 
 		# ---------------------------------------------------------------------------------------------------------------------------------------------------
-		# Se in 'parameter' troviamo il valore 'distribution' --> dimensione frattale per calcolo di E2
-		if p == 'distribution':
+		# Se in 'parameter' troviamo il valore 'distribution' --> dimensione frattale per calcolo di E0, E2 o distribution
+		if p in ('distribution_E0', 'distribution_E2', 'distribution'):
 			print("<System> CASE DISTRIBUTION")
-			print(f"<System> The user requested the calculation of the x and y lists relating to the distribution of the geometries in the dataset group '{nameSummary}'!")
+			if p == 'distribution':
+				print(f"<System> The user requested the calculation of the x and y lists relating to the distribution of the geometries in the dataset group '{nameSummary}'! Required E0 and E2.")
+			elif p == 'distribution_E0':
+				print(f"<System> The user requested the calculation of the x and y lists relating to the distribution of the geometries in the dataset group '{nameSummary}'! Required E0.")
+			else:
+				print(f"<System> The user requested the calculation of the x and y lists relating to the distribution of the geometries in the dataset group '{nameSummary}'! Required E2.")
 			
 			# Verifica che siano stati inseriti tutti i parametri necessari al calcolo richiesto
 			if '' in (pathDatasets, pathSummary, nameSummary) or fromX is None or toX is None:
@@ -673,7 +694,8 @@ def main():
 			# Genero una lista composta da ('datasetName', 'num_features', 'x1', 'y1', 'x2', 'y2') e calcolo per ciascuno la dimensione frattale
 			print(f"<System> Analysis of the summary in '{nameSummary}'")
 			datasetsToAnalize = read_summary(path_nameSummary, fromX, toX)					# Lista di dataset
-			fractalDimensions = []															# Lista di [dataset - dimensioni frattali] da salvare
+			fractalDimensions_E0 = []														# Lista di [dataset - dimensioni frattali] da salvare - E0
+			fractalDimensions_E2 = []														# Lista di [dataset - dimensioni frattali] da salvare - E2
 
 			for datasetName, numFeatures, x1, y1, x2, y2 in datasetsToAnalize:		# Ciclo sulla lista
 				print()
@@ -683,40 +705,70 @@ def main():
 					raise ValueError(f"<System>      ERROR! The dataset '{datasetName}' does not exist in '{pathDatasets}'...")
 				
 				print(f"<System>      Start of the calculation of the x and y values needed to choose the start and end fields for dataset '{datasetName}'.")
-				x_dataset, y_dataset = fd2D(0, numFeatures, x1, x2, y1, y2, path_nameDataset, ",")
+				x_dataset, yE0_dataset, yE2_dataset = fd2D(0, numFeatures, x1, x2, y1, y2, path_nameDataset, ",")
 
 				# Calcolo di start e end tramite algoritmo standard che sceglie i primi valori che superano 0.50
-				start = -1
-				end = -1
-				for k in range(DIM-2):												# Calcolo valore START
-					#print(f"{y_dataset[k+1]} - {y_dataset[k]} = {abs(y_dataset[k+1] - y_dataset[k])}")
-					if (start == -1 and abs(y_dataset[k+1] - y_dataset[k]) >= 0.5):
-						start = k
-				if (start == -1):
-					start = 0
+				start_E0 = -1
+				end_E0 = -1
+				start_E2 = -1
+				end_E2 = -1
 
-				for k in range(DIM-2,0,-1):											# Calcolo valore END
-					#print(f"{y_dataset[k]} - {y_dataset[k-1]} = {abs(y_dataset[k] - y_dataset[k-1])}")
-					if (end == -1 and abs(y_dataset[k] - y_dataset[k-1]) >= 0.5):
-						end = k
-				if (end == -1):
-					end = DIM-2
+				for k in range(DIM-2):																# Calcolo valori START
+					if p in ('distribution', 'distribution_E0'):
+						if (start_E0 == -1 and abs(yE0_dataset[k+1] - yE0_dataset[k]) >= 0.5):
+							start_E0 = k
+							break
+					if p in ('distribution', 'distribution_E2'):
+						if (start_E2 == -1 and abs(yE2_dataset[k+1] - yE2_dataset[k]) >= 0.5):
+							start_E2 = k
+							break
+				if (start_E0 == -1):
+					start_E0 = 0
+				if (start_E2 == -1):
+					start_E2 = 0
+
+				for k in range(DIM-2,0,-1):															# Calcolo valori END
+					if p in ('distribution', 'distribution_E0'):
+						if (end_E0 == -1 and abs(yE0_dataset[k] - yE0_dataset[k-1]) >= 0.5):
+							end_E0 = k
+							break
+					if p in ('distribution', 'distribution_E2'):
+						if (end_E2 == -1 and abs(yE2_dataset[k] - yE2_dataset[k-1]) >= 0.5):
+							end_E2 = k
+							break
+				if (end_E0 == -1):
+					end_E0 = DIM-2
+				if (end_E2 == -1):
+					end_E2 = DIM-2
 				#print(f"{datasetName}")
 				#print(f"start: {start}; end: {end}.")
 
-				datasetName_noExt, _ = os.path.splitext(datasetName)				# Estrazione del nome del dataset senza estensione
-				record = (															# Costruisco ('nome dataset', 'dimensione frattale')
-					datasetName_noExt,
-					fractalDimension_calculation(start, end, x_dataset, y_dataset)
-				)
-				fractalDimensions.append(record)									# Inserimento della tupla nella lista
-
-			update_summary(path_nameSummary, fractalDimensions)					# Inserimento dei parametri calcolati nel sommario
+				datasetName_noExt, _ = os.path.splitext(datasetName)								# Estrazione del nome del dataset senza estensione
+				if p in ('distribution', 'distribution_E0'):
+					record = (																		# Costruisco ('nome dataset', 'dimensione frattale')
+						datasetName_noExt,
+						fractalDimension_calculation(start_E0, end_E0, x_dataset, yE0_dataset, "negative")
+					)
+					fractalDimensions_E0.append(record)												# Inserimento della tupla nella lista - E0
+				if p in ('distribution', 'distribution_E2'):
+					record = (																		# Costruisco ('nome dataset', 'dimensione frattale')
+						datasetName_noExt,
+						fractalDimension_calculation(start_E2, end_E2, x_dataset, yE2_dataset, "positive")
+					)
+					fractalDimensions_E2.append(record)												# Inserimento della tupla nella lista - E2
+			
+			# Inserimento dei parametri calcolati nel sommario
+			if p == 'distribution_E0':
+				update_summary(path_nameSummary, fractalDimensions_E0, None)
+			elif p == 'distribution_E2':
+				update_summary(path_nameSummary, None, fractalDimensions_E2)
+			else:
+				update_summary(path_nameSummary, fractalDimensions_E0, fractalDimensions_E2)
 			print("<System> End of fractal dimension calculation!")
 		# ---------------------------------------------------------------------------------------------------------------------------------------------------
-		# Se in 'parameter' troviamo uno tra i valori 'avg_area' o 'avg_side_length_0' o 'avg_side_length_1' --> dimensione frattale su quel parametro (no training set)
-		elif p in ('avg_area', 'avg_side_length_0', 'avg_side_length_1', 'E2'):
-			print("<System> CASE AVG_AREA OR AVG_SIDE_LENGTH_0 OR AVG_SIDE_LENGTH_1 OR E2")
+		# Se in 'parameter' troviamo uno tra i valori 'avg_area' o 'avg_side_length_0' o 'avg_side_length_1'or 'E0' or 'E2'  --> dimensione frattale su quel parametro (no training set)
+		elif p in ('avg_area', 'avg_side_length_0', 'avg_side_length_1', 'E0', 'E2'):
+			print("<System> CASE AVG_AREA OR AVG_SIDE_LENGTH_0 OR AVG_SIDE_LENGTH_1 OR E0 OR E2")
 			print(f"<System> The user requested the calculation of the x and y lists on the parameter '{p}' with reference to '{nameSummary}'")
 		
 			# Verifica che siano stati inseriti tutti i parametri necessari al calcolo richiesto
@@ -739,7 +791,10 @@ def main():
 			minValue, maxValue, rowCount = searchMinMaxCount(path_nameSummary, p)
 
 			print(f"<System>      Start of the calculation of the x and y values needed to choose the start and end fields of the '{p}' column.")
-			x, y = fd(0, rowCount, 0, maxValue, path_nameSummary, p, ";")
+			print("DEBUG minValue:", minValue)
+			print("DEBUG maxValue:", maxValue)
+			print("DEBUG delta:", maxValue - minValue)
+			x, y = fd(0, rowCount, minValue, maxValue, path_nameSummary, p, ";")
 
 			updateSupport(expectedHeader, fileSupport, p, '', '', path_nameFD, '', '', DIM-1, x, y)
 			
@@ -774,43 +829,31 @@ def main():
 			updateSupport(expectedHeader, fileSupport, p, '', '', path_nameFD, '', '', DIM-1, x, y)
 			
 		# ---------------------------------------------------------------------------------------------------------------------------------------------------
-		# Se in 'parameter' troviamo il valore 'distribution' --> dimensione frattale per calcolo di E2
+		# Se in 'parameter' troviamo il valore 'fd'
 		elif p == 'fd':
 			print("<System> CASE FRACTAL DIMENSION")
-			if parameter_list[0] == 'distribution':
-				print(f"<System> The user requested the calculation of fractal dimension relating to the distribution of the geometries in the dataset group '{nameSummary}'!")
-				fractalDimensions = []													# Lista di [dataset - dimensioni frattali] da salvare
-				for i, dataset in enumerate(dataset_list):								# Per ogni dataset presente nella lista...
-					datasetName_noExt, _ = os.path.splitext(dataset)					# Estrazione del nome del dataset senza estensione
-					record = (															# Costruisco ('nome dataset', 'dimensione frattale')
-						datasetName_noExt,
-						fractalDimension_calculation(int(start_list[i]), int(end_list[i]), x_list[i], y_list[i])
-					)
-					fractalDimensions.append(record)									# Inserimento della tupla nella lista
-				update_summary(path_summary_list[0], fractalDimensions)					# Inserimento dei parametri calcolati nel sommario
-				print("<System> End of fractal dimension calculation!")
-			elif parameter_list[0] in ('avg_area', 'avg_side_length_0', 'avg_side_length_1', 'E2'):
-				print(f"<System> The user requested the calculation of the fractal dimension related to the parameters 'avg_area' or 'avg_side_length_0' or 'avg_side_length_1' or 'E2'!")
-				fractalDimensions = []													# Lista di [parameter - dimensioni frattali] da salvare
-				for i, parameter in enumerate(parameter_list):							# Per ogni parametro presente nella lista...
-					record = (															# Costruisco ('parametro', 'dimensione frattale')
+			if parameter_list[0] in ('avg_area', 'avg_side_length_0', 'avg_side_length_1', 'E0', 'E2'):
+				print(f"<System> The user requested the calculation of the fractal dimension related to the parameters 'avg_area' or 'avg_side_length_0' or 'avg_side_length_1' or 'E0' or 'E2'!")
+				fractalDimensions = []															# Lista di [parameter - dimensioni frattali] da salvare
+				for i, parameter in enumerate(parameter_list):									# Per ogni parametro presente nella lista...
+					record = (																	# Costruisco ('parametro', 'dimensione frattale')
 						parameter,
-						fractalDimension_calculation(int(start_list[i]), int(end_list[i]), x_list[i], y_list[i])
+						fractalDimension_calculation(int(start_list[i]), int(end_list[i]), x_list[i], y_list[i], "positive")
 					)
-					fractalDimensions.append(record)									# Inserimento della tupla nella lista
-				header = ["avg_area", "avg_side_length_0", "avg_side_length_1", "E2"]	# Header del file
-				update_fd(path_fd_list[0], fractalDimensions, header)					# Inserimento dei parametri calcolati nel file correlato
+					fractalDimensions.append(record)											# Inserimento della tupla nella lista
+				header = ["avg_area", "avg_side_length_0", "avg_side_length_1", "E0", "E2"]		# Header del file
+				update_fd(path_fd_list[0], fractalDimensions, header)							# Inserimento dei parametri calcolati nel file correlato
 			elif parameter_list[0] in ('cardinality', 'mbrTests', 'totalExecutionTime'):
 				print(f"<System> The user requested the calculation of the fractal dimension related to the parameters 'cardinality' or 'executionTime' or 'mbrTests'!")
-				fractalDimensions = []													# Lista di [parameter - dimensioni frattali] da salvare
-				for i, parameter in enumerate(parameter_list):							# Per ogni parametro presente nella lista...
-					record = (															# Costruisco ('parametro', 'dimensione frattale')
+				fractalDimensions = []															# Lista di [parameter - dimensioni frattali] da salvare
+				for i, parameter in enumerate(parameter_list):									# Per ogni parametro presente nella lista...
+					record = (																	# Costruisco ('parametro', 'dimensione frattale')
 						parameter,
-						fractalDimension_calculation(int(start_list[i]), int(end_list[i]), x_list[i], y_list[i])
+						fractalDimension_calculation(int(start_list[i]), int(end_list[i]), x_list[i], y_list[i], "positive")
 					)
-					fractalDimensions.append(record)									# Inserimento della tupla nella lista
-				header = ["cardinality", "mbrTests", "totalExecutionTime"]				# Header del file
-				update_fd(path_fd_list[0], fractalDimensions, header)					# Inserimento dei parametri calcolati nel file correlato
+					fractalDimensions.append(record)											# Inserimento della tupla nella lista
+				header = ["cardinality", "mbrTests", "totalExecutionTime"]						# Header del file
+				update_fd(path_fd_list[0], fractalDimensions, header)							# Inserimento dei parametri calcolati nel file correlato
 			else:
 				print(f"<System> ERROR! The entered parameter '{p}' is invalid...")
 

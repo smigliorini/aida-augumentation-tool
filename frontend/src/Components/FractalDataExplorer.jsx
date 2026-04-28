@@ -140,15 +140,39 @@ function FractalDataExplorer({ refreshKey }) {
                             {Object.entries(apiData).map(([datasetId, data]) => (
                                 <Card key={datasetId} title={datasetId} className="p-card-shadow" style={{ backgroundColor: '#20262E' }}>
                                     
-                                    {/* --- Section 1: E2 Distribution --- */}
-                                    {data.e2Distribution && data.e2Distribution.length > 0 && (
-                                        <div>
-                                            <h3 className="text-xl font-semibold mt-2 mb-3">Input Spatial Distribution (E2)</h3>
-                                            <DataTable value={data.e2Distribution} stripedRows paginator rows={5} className="p-datatable-sm">
-                                                <Column field="datasetName" header="Dataset Name" sortable />
-                                                <Column field="e2Value" header="E2 Value" body={(rowData) => formatNumber(rowData.e2Value)} sortable />
-                                            </DataTable>
-                                        </div>
+                                    {/* --- Section 1: E0 & E2 Distribution --- */}
+                                    {((data.e2Distribution && data.e2Distribution.length > 0) || (data.e0Distribution && data.e0Distribution.length > 0)) && (
+                                        (() => {
+                                            // Uniamo i dati di E0 ed E2 basandoci sul nome del dataset per una singola tabella comparativa
+                                            const distributionMap = {};
+                                            
+                                            if (data.e2Distribution) {
+                                                data.e2Distribution.forEach(item => {
+                                                    distributionMap[item.datasetName] = { datasetName: item.datasetName, e2Value: item.e2Value };
+                                                });
+                                            }
+                                            if (data.e0Distribution) {
+                                                data.e0Distribution.forEach(item => {
+                                                    if (!distributionMap[item.datasetName]) {
+                                                        distributionMap[item.datasetName] = { datasetName: item.datasetName };
+                                                    }
+                                                    distributionMap[item.datasetName].e0Value = item.e0Value;
+                                                });
+                                            }
+                                            
+                                            const combinedDistribution = Object.values(distributionMap);
+
+                                            return (
+                                                <div>
+                                                    <h3 className="text-xl font-semibold mt-2 mb-3">Input Spatial Distributions (E0 & E2)</h3>
+                                                    <DataTable value={combinedDistribution} stripedRows paginator rows={5} className="p-datatable-sm">
+                                                        <Column field="datasetName" header="Dataset Name" sortable />
+                                                        <Column field="e0Value" header="E0 Value" body={(rowData) => formatNumber(rowData.e0Value)} sortable />
+                                                        <Column field="e2Value" header="E2 Value" body={(rowData) => formatNumber(rowData.e2Value)} sortable />
+                                                    </DataTable>
+                                                </div>
+                                            );
+                                        })()
                                     )}
 
                                     {/* --- Section 2: Dataset Group Properties --- */}
